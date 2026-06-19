@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { TEMPLATES } from '@/lib/templates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,12 +14,14 @@ import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { AuthDialog } from '@/components/AuthDialog'
 import { toast } from 'sonner'
 import {
   FileText, Sparkles, Image as ImageIcon, Building2,
   Phone, Mail, Globe, MapPin, Hash, Loader2, FileImage, FileDown, Palette,
   PenLine, FolderOpen, Save, Trash2, Plus, LogIn, LogOut, UserCircle, CalendarDays,
+  Lock, Shield, Clock, CheckCircle2, XCircle, FileQuestion, Upload, AlertCircle,
 } from 'lucide-react'
 
 const defaultCompany = {
@@ -249,7 +252,116 @@ function LibraryDialog({ open, onOpenChange, onLoad }) {
   )
 }
 
+function StatusBanner({ user, onRefresh, onLogin }) {
+  const [uploading, setUploading] = useState(false)
+  const [files, setFiles] = useState([])
+  const [userNote, setUserNote] = useState('')
+
+  if (!user) {
+    return (
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200">
+        <div className="max-w-[1600px] mx-auto px-6 py-2.5 flex items-center justify-between gap-3 text-sm">
+          <div className="flex items-center gap-2 text-blue-900">
+            <Sparkles className="w-4 h-4" />
+            <span>You're browsing as guest — free templates work, but <b>save library</b>, <b>AI</b>, and <b>premium templates</b> require an account.</span>
+          </div>
+          <Button size="sm" onClick={onLogin} className="bg-blue-600 hover:bg-blue-700">Sign up free</Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (user.status === 'approved') return null
+
+  const onPick = (e) => {
+    const list = Array.from(e.target.files || [])
+    Promise.all(list.map(f => new Promise(res => {
+      const r = new FileReader()
+      r.onload = () => res({ name: f.name, dataUri: r.result })
+      r.readAsDataURL(f)
+    }))).then(picked => setFiles((prev) => prev.concat(picked)))
+    e.target.value = ''
+  }
+
+  const submitDocs = async () => {
+    if (files.length === 0) return toast.error('Pick at least one file')
+    setUploading(true)
+    try {
+      const res = await fetch('/api/user/upload-docs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ documents: files, note: userNote }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Upload failed')
+      toast.success('Documents submitted for review')
+      setFiles([])
+      setUserNote('')
+      onRefresh?.()
+    } catch (e) { toast.error(e.message) } finally { setUploading(false) }
+  }
+
+  if (user.status === 'pending') {
+    return (
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200">
+        <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-start gap-3 text-sm">
+          <Clock className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <div className="font-semibold text-amber-900">Awaiting admin approval</div>
+            <div className="text-xs text-amber-800 mt-0.5">
+              You can build & download letterheads using free templates. <b>Premium templates, AI letter writer</b>, and <b>save to library</b> will unlock after the admin approves your account.
+              {user.payment?.utr && <> Payment UTR <span className="font-mono">{user.payment.utr}</span> submitted for verification.</>}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  if (user.status === 'rejected') {
+    return (
+      <div className="bg-gradient-to-r from-red-50 to-rose-50 border-b border-red-200">
+        <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-start gap-3 text-sm">
+          <XCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+          <div>
+            <div className="font-semibold text-red-900">Account rejected</div>
+            <div className="text-xs text-red-800 mt-0.5">Your account has been rejected by the admin. Please contact support for assistance.</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  if (user.status === 'docs_requested') {
+    return (
+      <div className="bg-gradient-to-r from-violet-50 to-fuchsia-50 border-b border-violet-200">
+        <div className="max-w-[1600px] mx-auto px-6 py-3 text-sm">
+          <div className="flex items-start gap-3">
+            <FileQuestion className="w-5 h-5 text-violet-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <div className="font-semibold text-violet-900">Admin has requested documents</div>
+              <div className="text-xs text-violet-800 mt-0.5 mb-2 italic">"{user.docsRequest?.message}"</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="cursor-pointer text-xs px-3 py-1.5 rounded-md bg-white border border-violet-300 hover:bg-violet-100 transition gap-1 inline-flex items-center">
+                  <Upload className="w-3.5 h-3.5" /> Add files
+                  <input type="file" accept="image/*,.pdf,.doc,.docx" multiple onChange={onPick} className="hidden" />
+                </label>
+                {files.length > 0 && (
+                  <span className="text-xs text-violet-700">{files.length} file(s) ready: {files.map(f => f.name).join(', ').slice(0, 60)}</span>
+                )}
+                <Input value={userNote} onChange={(e) => setUserNote(e.target.value)} placeholder="Optional note to admin..." className="h-8 text-xs max-w-xs" />
+                <Button size="sm" onClick={submitDocs} disabled={uploading || files.length === 0} className="bg-violet-600 hover:bg-violet-700 gap-1">
+                  {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Submit
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  return null
+}
+
 function App() {
+  const router = useRouter()
   const [currentId, setCurrentId] = useState(null)
   const [company, setCompany] = useState(defaultCompany)
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id)
@@ -270,12 +382,17 @@ function App() {
   const hiddenRef = useRef(null)
 
   // Load current user on mount
-  useEffect(() => {
-    fetch('/api/auth/me', { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => setUser(d.user))
-      .catch(() => {})
-  }, [])
+  const refreshUser = async () => {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'include' })
+      const d = await r.json()
+      setUser(d.user)
+    } catch {}
+  }
+  useEffect(() => { refreshUser() }, [])
+
+  const isApproved = user?.status === 'approved'
+  const isAdmin = user?.role === 'admin'
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
@@ -307,10 +424,12 @@ function App() {
   }
 
   const generateAI = async () => {
+    if (!user) { setAuthTab('login'); setAuthOpen(true); return toast.info('Log in to use AI letter writer') }
+    if (!isApproved) return toast.error('AI is a premium feature \u2014 awaiting admin approval')
     if (!aiPrompt.trim()) return toast.error('Describe the letter you want')
     setAiLoading(true)
     try {
-      const res = await fetch('/api/ai/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: aiPrompt, company, tone: 'professional' }) })
+      const res = await fetch('/api/ai/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ prompt: aiPrompt, company, tone: 'professional' }) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'AI failed')
       setLetterBody(data.body)
@@ -363,6 +482,7 @@ function App() {
 
   const saveLetterhead = async () => {
     if (!requireAuth()) return
+    if (!isApproved) return toast.error('Save library is a premium feature \u2014 awaiting admin approval')
     try {
       const payload = { id: currentId || undefined, title: `${company.businessName} — ${template.name}`, company, template: templateId, letterBody, signature, letterMeta }
       const res = await fetch('/api/letterheads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
@@ -375,7 +495,19 @@ function App() {
 
   const openLibrary = () => {
     if (!requireAuth()) return
+    if (!isApproved) return toast.error('Library is a premium feature \u2014 awaiting admin approval')
     setLibraryOpen(true)
+  }
+
+  const selectTemplate = (t) => {
+    if (t.premium && !isApproved) {
+      if (!user) {
+        setAuthTab('signup'); setAuthOpen(true)
+        return toast.info('Sign up to unlock premium templates')
+      }
+      return toast.error('Premium template \u2014 awaiting admin approval')
+    }
+    setTemplateId(t.id)
   }
 
   const loadLetterhead = (it) => {
@@ -441,7 +573,12 @@ function App() {
                       <div className="text-xs font-normal text-slate-500">{user.email}</div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setLibraryOpen(true)}><FolderOpen className="w-4 h-4 mr-2" /> My Letterheads</DropdownMenuItem>
+                    {isAdmin && (
+                      <DropdownMenuItem onClick={() => router.push('/admin')} className="text-blue-600 font-semibold">
+                        <Shield className="w-4 h-4 mr-2" /> Admin Panel
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => openLibrary()}><FolderOpen className="w-4 h-4 mr-2" /> My Letterheads</DropdownMenuItem>
                     <DropdownMenuItem onClick={logout} className="text-red-600"><LogOut className="w-4 h-4 mr-2" /> Log out</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -453,7 +590,9 @@ function App() {
         </div>
       </header>
 
-      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} onAuthed={setUser} defaultTab={authTab} />
+      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} onAuthed={(u) => { setUser(u); refreshUser() }} defaultTab={authTab} />
+
+      <StatusBanner user={user} onRefresh={refreshUser} onLogin={() => { setAuthTab('signup'); setAuthOpen(true) }} />
 
       <LibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} onLoad={loadLetterhead} />
 
@@ -571,19 +710,31 @@ function App() {
               <TabsContent value="design" className="m-0">
                 <ScrollArea className="h-[calc(100vh-180px)]">
                   <div className="p-4 space-y-3">
-                    <div className="text-xs text-slate-500 mb-2">Pick a template style ({TEMPLATES.length} designs)</div>
+                    <div className="text-xs text-slate-500 mb-2 flex items-center justify-between">
+                      <span>{TEMPLATES.filter(t => !t.premium).length} free · {TEMPLATES.filter(t => t.premium).length} premium</span>
+                      {!isApproved && <span className="text-amber-600 flex items-center gap-1"><Lock className="w-3 h-3" />Approval unlocks all</span>}
+                    </div>
                     <div className="grid grid-cols-1 gap-2">
-                      {TEMPLATES.map((t) => (
-                        <button key={t.id} onClick={() => setTemplateId(t.id)} className={`text-left p-3 rounded-lg border-2 transition ${templateId === t.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
-                          <div className="flex items-center gap-3">
-                            <div className="w-6 h-10 rounded shrink-0" style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.accent})` }} />
-                            <div>
-                              <div className="font-semibold text-sm">{t.name}</div>
-                              <div className="text-[10px] text-slate-500 uppercase tracking-wide">{t.category}</div>
+                      {TEMPLATES.map((t) => {
+                        const locked = t.premium && !isApproved
+                        return (
+                          <button key={t.id} onClick={() => selectTemplate(t)} className={`text-left p-3 rounded-lg border-2 transition relative ${templateId === t.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300 bg-white'} ${locked ? 'opacity-75' : ''}`}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-6 h-10 rounded shrink-0 relative" style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.accent})` }}>
+                                {locked && <Lock className="w-3 h-3 text-white absolute inset-0 m-auto" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-sm flex items-center gap-1.5">
+                                  {t.name}
+                                  {t.premium && <Sparkles className="w-3 h-3 text-amber-500" />}
+                                </div>
+                                <div className="text-[10px] text-slate-500 uppercase tracking-wide">{t.category}</div>
+                              </div>
+                              {locked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
                             </div>
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 </ScrollArea>
