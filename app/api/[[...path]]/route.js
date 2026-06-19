@@ -173,6 +173,7 @@ async function handleRoute(request, { params }) {
         template: body.template || 'corporate-blue',
         letterBody: body.letterBody || '',
         signature: body.signature || '',
+        letterMeta: body.letterMeta || {},
         updatedAt: new Date(),
       }
       const existing = await db.collection('letterheads').findOne({ id: doc.id })

@@ -18,7 +18,7 @@ import { toast } from 'sonner'
 import {
   FileText, Sparkles, Image as ImageIcon, Building2,
   Phone, Mail, Globe, MapPin, Hash, Loader2, FileImage, FileDown, Palette,
-  PenLine, FolderOpen, Save, Trash2, Plus, LogIn, LogOut, UserCircle,
+  PenLine, FolderOpen, Save, Trash2, Plus, LogIn, LogOut, UserCircle, CalendarDays,
 } from 'lucide-react'
 
 const defaultCompany = {
@@ -41,11 +41,25 @@ const defaultLetter = `Dear Sir/Madam,\n\nWe hope this letter finds you well. We
 
 // A4 dimensions at 96dpi roughly: 794 x 1123. We render header+footer fixed, body flows.
 // For multi-page PDF, we render hidden full-content version offscreen then slice canvas.
-function LetterheadDoc({ company, template, letterBody, signature, refEl, paginated = false }) {
+function LetterheadDoc({ company, template, letterBody, signature, letterMeta = {}, refEl, paginated = false }) {
   const t = template
   const headerBg = t.headerStyle === 'gradient'
     ? `linear-gradient(135deg, ${t.primary} 0%, ${t.accent} 100%)`
     : t.primary
+
+  // Format date: accept YYYY-MM-DD or empty -> today
+  const dateText = (() => {
+    const raw = letterMeta?.date
+    let d
+    if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const [y, m, day] = raw.split('-').map(Number)
+      d = new Date(y, m - 1, day)
+    } else {
+      d = new Date()
+    }
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
+  })()
+  const refText = letterMeta?.refNo && letterMeta.refNo.trim() ? letterMeta.refNo : '___________________'
 
   return (
     <div
@@ -127,8 +141,8 @@ function LetterheadDoc({ company, template, letterBody, signature, refEl, pagina
 
       {/* DATE + REF */}
       <div style={{ padding: '20px 56px 0', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}>
-        <div>Ref: ___________________</div>
-        <div>Date: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+        <div>Ref: {refText}</div>
+        <div>Date: {dateText}</div>
       </div>
 
       {/* BODY */}
@@ -241,6 +255,10 @@ function App() {
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id)
   const [letterBody, setLetterBody] = useState(defaultLetter)
   const [signature, setSignature] = useState('')
+  const [letterMeta, setLetterMeta] = useState({
+    date: new Date().toISOString().slice(0, 10), // YYYY-MM-DD
+    refNo: '',
+  })
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -346,7 +364,7 @@ function App() {
   const saveLetterhead = async () => {
     if (!requireAuth()) return
     try {
-      const payload = { id: currentId || undefined, title: `${company.businessName} — ${template.name}`, company, template: templateId, letterBody, signature }
+      const payload = { id: currentId || undefined, title: `${company.businessName} — ${template.name}`, company, template: templateId, letterBody, signature, letterMeta }
       const res = await fetch('/api/letterheads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Save failed')
@@ -366,6 +384,7 @@ function App() {
     setTemplateId(it.template || TEMPLATES[0].id)
     setLetterBody(it.letterBody || '')
     setSignature(it.signature || '')
+    setLetterMeta(it.letterMeta || { date: new Date().toISOString().slice(0, 10), refNo: '' })
     toast.success(`Loaded “${it.title}”`)
   }
 
@@ -375,6 +394,7 @@ function App() {
     setTemplateId(TEMPLATES[0].id)
     setLetterBody(defaultLetter)
     setSignature('')
+    setLetterMeta({ date: new Date().toISOString().slice(0, 10), refNo: '' })
     toast.success('New letterhead')
   }
 
@@ -444,6 +464,7 @@ function App() {
             <Tabs defaultValue="company" className="w-full">
               <TabsList className="w-full rounded-none border-b bg-slate-50/50 h-11">
                 <TabsTrigger value="company" className="flex-1 gap-1.5"><Building2 className="w-3.5 h-3.5" />Profile</TabsTrigger>
+                <TabsTrigger value="letter" className="flex-1 gap-1.5"><CalendarDays className="w-3.5 h-3.5" />Letter</TabsTrigger>
                 <TabsTrigger value="design" className="flex-1 gap-1.5"><Palette className="w-3.5 h-3.5" />Design</TabsTrigger>
                 <TabsTrigger value="ai" className="flex-1 gap-1.5"><Sparkles className="w-3.5 h-3.5" />AI</TabsTrigger>
               </TabsList>
@@ -486,6 +507,65 @@ function App() {
                     </div>
                   </div>
                 </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="letter" className="m-0">
+                <div className="p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                      <CalendarDays className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm">Letter Details</div>
+                      <div className="text-xs text-slate-500">Date & reference shown on letterhead</div>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs flex items-center gap-1"><CalendarDays className="w-3 h-3" />Date</Label>
+                    <Input
+                      type="date"
+                      value={letterMeta.date}
+                      onChange={(e) => setLetterMeta((m) => ({ ...m, date: e.target.value }))}
+                      className="mt-1 text-sm h-9"
+                    />
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      Shown as: <span className="font-medium text-slate-700">
+                        {(() => {
+                          if (!letterMeta.date) return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
+                          const [y, mo, d] = letterMeta.date.split('-').map(Number)
+                          return new Date(y, mo - 1, d).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs flex items-center gap-1"><Hash className="w-3 h-3" />Reference No. (optional)</Label>
+                    <Input
+                      value={letterMeta.refNo}
+                      onChange={(e) => setLetterMeta((m) => ({ ...m, refNo: e.target.value }))}
+                      placeholder="e.g. ACL/2025-26/0042"
+                      className="mt-1 text-sm h-9"
+                    />
+                    <div className="text-[11px] text-slate-500 mt-1">Leave blank for a blank line on the letterhead.</div>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLetterMeta({ date: new Date().toISOString().slice(0, 10), refNo: '' })}
+                    >
+                      Reset to today
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLetterMeta((m) => ({ ...m, date: '' }))}
+                    >
+                      Clear date
+                    </Button>
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="design" className="m-0">
@@ -552,7 +632,7 @@ function App() {
               <span className="font-mono">{template.name}</span>
             </div>
             <div className="flex justify-center" style={{ transform: 'scale(0.78)', transformOrigin: 'top center', marginBottom: '-220px' }}>
-              <LetterheadDoc company={company} template={template} letterBody={letterBody} signature={signature} refEl={previewRef} />
+              <LetterheadDoc company={company} template={template} letterBody={letterBody} signature={signature} letterMeta={letterMeta} refEl={previewRef} />
             </div>
           </Card>
         </div>
@@ -578,7 +658,7 @@ function App() {
 
       {/* Hidden offscreen full-flow doc for multi-page PDF export */}
       <div style={{ position: 'fixed', left: -10000, top: 0, opacity: 0, pointerEvents: 'none' }} aria-hidden>
-        <LetterheadDoc company={company} template={template} letterBody={letterBody} signature={signature} refEl={hiddenRef} paginated />
+        <LetterheadDoc company={company} template={template} letterBody={letterBody} signature={signature} letterMeta={letterMeta} refEl={hiddenRef} paginated />
       </div>
     </div>
   )
