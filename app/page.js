@@ -11,11 +11,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { AuthDialog } from '@/components/AuthDialog'
 import { toast } from 'sonner'
 import {
   FileText, Sparkles, Image as ImageIcon, Building2,
   Phone, Mail, Globe, MapPin, Hash, Loader2, FileImage, FileDown, Palette,
-  PenLine, FolderOpen, Save, Trash2, Plus,
+  PenLine, FolderOpen, Save, Trash2, Plus, LogIn, LogOut, UserCircle,
 } from 'lucide-react'
 
 const defaultCompany = {
@@ -186,11 +189,11 @@ function LibraryDialog({ open, onOpenChange, onLoad }) {
   useEffect(() => {
     if (!open) return
     setLoading(true)
-    fetch('/api/letterheads').then(r => r.json()).then(d => setItems(Array.isArray(d) ? d : [])).finally(() => setLoading(false))
+    fetch('/api/letterheads', { credentials: 'include' }).then(r => r.json()).then(d => setItems(Array.isArray(d) ? d : [])).finally(() => setLoading(false))
   }, [open])
 
   const remove = async (id) => {
-    await fetch(`/api/letterheads/${id}`, { method: 'DELETE' })
+    await fetch(`/api/letterheads/${id}`, { method: 'DELETE', credentials: 'include' })
     setItems(items.filter(i => i.id !== id))
     toast.success('Deleted')
   }
@@ -242,8 +245,36 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [user, setUser] = useState(null)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authTab, setAuthTab] = useState('login')
   const previewRef = useRef(null)
   const hiddenRef = useRef(null)
+
+  // Load current user on mount
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setUser(d.user))
+      .catch(() => {})
+  }, [])
+
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    setUser(null)
+    setCurrentId(null)
+    toast.success('Logged out')
+  }
+
+  const requireAuth = (action) => {
+    if (!user) {
+      setAuthTab('login')
+      setAuthOpen(true)
+      toast.info('Please log in to continue')
+      return false
+    }
+    return true
+  }
 
   const template = TEMPLATES.find((t) => t.id === templateId) || TEMPLATES[0]
   const updateCompany = (k, v) => setCompany((c) => ({ ...c, [k]: v }))
@@ -313,14 +344,20 @@ function App() {
   }
 
   const saveLetterhead = async () => {
+    if (!requireAuth()) return
     try {
       const payload = { id: currentId || undefined, title: `${company.businessName} — ${template.name}`, company, template: templateId, letterBody, signature }
-      const res = await fetch('/api/letterheads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetch('/api/letterheads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Save failed')
       setCurrentId(data.id)
       toast.success('Saved to library')
     } catch (e) { toast.error(e.message) }
+  }
+
+  const openLibrary = () => {
+    if (!requireAuth()) return
+    setLibraryOpen(true)
   }
 
   const loadLetterhead = (it) => {
@@ -356,15 +393,47 @@ function App() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="ghost" onClick={newDoc} className="gap-2"><Plus className="w-4 h-4" /> New</Button>
-            <Button variant="outline" onClick={() => setLibraryOpen(true)} className="gap-2"><FolderOpen className="w-4 h-4" /> Library</Button>
+            <Button variant="outline" onClick={openLibrary} className="gap-2"><FolderOpen className="w-4 h-4" /> Library</Button>
             <Button variant="outline" onClick={saveLetterhead} className="gap-2"><Save className="w-4 h-4" /> Save</Button>
             <Button variant="outline" onClick={downloadPNG} disabled={exporting} className="gap-2"><FileImage className="w-4 h-4" /> PNG</Button>
             <Button onClick={downloadPDF} disabled={exporting} className="gap-2 bg-blue-600 hover:bg-blue-700">
               {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} Download PDF
             </Button>
+            <div className="ml-2 pl-2 border-l border-slate-300">
+              {user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-bold">
+                          {(user.name || user.email || '?').slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="text-left hidden md:block">
+                        <div className="text-xs font-semibold text-slate-900 leading-tight">{user.name}</div>
+                        <div className="text-[10px] text-slate-500 leading-tight">{user.email}</div>
+                      </div>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>
+                      <div className="font-semibold">{user.name}</div>
+                      <div className="text-xs font-normal text-slate-500">{user.email}</div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setLibraryOpen(true)}><FolderOpen className="w-4 h-4 mr-2" /> My Letterheads</DropdownMenuItem>
+                    <DropdownMenuItem onClick={logout} className="text-red-600"><LogOut className="w-4 h-4 mr-2" /> Log out</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button onClick={() => { setAuthTab('login'); setAuthOpen(true) }} variant="ghost" className="gap-2"><LogIn className="w-4 h-4" /> Log in</Button>
+              )}
+            </div>
           </div>
         </div>
       </header>
+
+      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} onAuthed={setUser} defaultTab={authTab} />
 
       <LibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} onLoad={loadLetterhead} />
 
