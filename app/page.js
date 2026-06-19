@@ -16,12 +16,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { AuthDialog } from '@/components/AuthDialog'
+import { ChangePasswordDialog } from '@/components/ChangePasswordDialog'
 import { toast } from 'sonner'
 import {
   FileText, Sparkles, Image as ImageIcon, Building2,
   Phone, Mail, Globe, MapPin, Hash, Loader2, FileImage, FileDown, Palette,
   PenLine, FolderOpen, Save, Trash2, Plus, LogIn, LogOut, UserCircle, CalendarDays,
-  Lock, Shield, Clock, CheckCircle2, XCircle, FileQuestion, Upload, AlertCircle,
+  Lock, Shield, Clock, CheckCircle2, XCircle, FileQuestion, Upload, AlertCircle, KeyRound,
 } from 'lucide-react'
 
 const defaultCompany = {
@@ -378,6 +379,7 @@ function App() {
   const [user, setUser] = useState(null)
   const [authOpen, setAuthOpen] = useState(false)
   const [authTab, setAuthTab] = useState('login')
+  const [changePwdOpen, setChangePwdOpen] = useState(false)
   const previewRef = useRef(null)
   const hiddenRef = useRef(null)
 
@@ -579,6 +581,7 @@ function App() {
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem onClick={() => openLibrary()}><FolderOpen className="w-4 h-4 mr-2" /> My Letterheads</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setChangePwdOpen(true)}><KeyRound className="w-4 h-4 mr-2" /> Change Password</DropdownMenuItem>
                     <DropdownMenuItem onClick={logout} className="text-red-600"><LogOut className="w-4 h-4 mr-2" /> Log out</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -591,6 +594,7 @@ function App() {
       </header>
 
       <AuthDialog open={authOpen} onOpenChange={setAuthOpen} onAuthed={(u) => { setUser(u); refreshUser() }} defaultTab={authTab} />
+      <ChangePasswordDialog open={changePwdOpen} onOpenChange={setChangePwdOpen} />
 
       <StatusBanner user={user} onRefresh={refreshUser} onLogin={() => { setAuthTab('signup'); setAuthOpen(true) }} />
 

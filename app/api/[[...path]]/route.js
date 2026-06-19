@@ -21,12 +21,12 @@ async function connectToMongo() {
 
 async function seedAdmin(db) {
   const email = (process.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase().trim()
-  // Hardcoded to bypass .env parsing issues with special chars like # and $
-  const password = 'Shreya#$1'
+  const defaultPassword = 'Shreya#$1'
+  const forceReset = process.env.FORCE_ADMIN_RESET === 'true'
   try {
-    const hash = await bcrypt.hash(password, 10)
     const existing = await db.collection('users').findOne({ email })
     if (!existing) {
+      const hash = await bcrypt.hash(defaultPassword, 10)
       await db.collection('users').insertOne({
         id: uuidv4(),
         email,
@@ -39,14 +39,16 @@ async function seedAdmin(db) {
         adminNote: 'Auto-seeded super admin',
         createdAt: new Date(),
       })
-      console.log(`[seedAdmin] Created admin: ${email}`)
+      console.log(`[seedAdmin] Created admin: ${email} (default password)`)
     } else {
-      // Always re-sync password, role and status to match env (idempotent)
-      await db.collection('users').updateOne(
-        { email },
-        { $set: { passwordHash: hash, role: 'admin', status: 'approved', name: existing.name || process.env.ADMIN_NAME || 'Super Admin' } },
-      )
-      console.log(`[seedAdmin] Synced admin password & role: ${email}`)
+      // Always ensure role + status are correct, but ONLY reset password if forced
+      const update = { role: 'admin', status: 'approved' }
+      if (forceReset) {
+        update.passwordHash = await bcrypt.hash(defaultPassword, 10)
+        console.log(`[seedAdmin] FORCE_ADMIN_RESET set \u2014 admin password reset to default`)
+      }
+      await db.collection('users').updateOne({ email }, { $set: update })
+      console.log(`[seedAdmin] Synced admin role/status${forceReset ? ' + password' : ''}: ${email}`)
     }
   } catch (e) {
     console.error('[seedAdmin] failed:', e.message)
@@ -184,6 +186,20 @@ async function handleRoute(request, { params }) {
 
     if (route === '/auth/logout' && method === 'POST') {
       return handleCORS(clearAuthCookie(NextResponse.json({ ok: true })))
+    }
+
+    if (route === '/auth/change-password' && method === 'POST') {
+      const me = await getFullUserFromRequest(request, db)
+      if (!me) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      const { currentPassword, newPassword } = await request.json()
+      if (!currentPassword || !newPassword) return handleCORS(NextResponse.json({ error: 'Both passwords required' }, { status: 400 }))
+      if (newPassword.length < 6) return handleCORS(NextResponse.json({ error: 'New password must be at least 6 characters' }, { status: 400 }))
+      const u = await db.collection('users').findOne({ id: me.id })
+      const ok = await bcrypt.compare(currentPassword, u.passwordHash)
+      if (!ok) return handleCORS(NextResponse.json({ error: 'Current password is incorrect' }, { status: 401 }))
+      const newHash = await bcrypt.hash(newPassword, 10)
+      await db.collection('users').updateOne({ id: me.id }, { $set: { passwordHash: newHash, passwordChangedAt: new Date() } })
+      return handleCORS(NextResponse.json({ ok: true }))
     }
 
     if (route === '/auth/me' && method === 'GET') {
