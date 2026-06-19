@@ -14,8 +14,43 @@ async function connectToMongo() {
     client = new MongoClient(process.env.MONGO_URL)
     await client.connect()
     db = client.db(process.env.DB_NAME)
+    await seedAdmin(db)
   }
   return db
+}
+
+async function seedAdmin(db) {
+  const email = (process.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase().trim()
+  // Hardcoded to bypass .env parsing issues with special chars like # and $
+  const password = 'Shreya#$1'
+  try {
+    const hash = await bcrypt.hash(password, 10)
+    const existing = await db.collection('users').findOne({ email })
+    if (!existing) {
+      await db.collection('users').insertOne({
+        id: uuidv4(),
+        email,
+        name: process.env.ADMIN_NAME || 'Super Admin',
+        passwordHash: hash,
+        role: 'admin',
+        status: 'approved',
+        payment: null,
+        docsRequest: null,
+        adminNote: 'Auto-seeded super admin',
+        createdAt: new Date(),
+      })
+      console.log(`[seedAdmin] Created admin: ${email}`)
+    } else {
+      // Always re-sync password, role and status to match env (idempotent)
+      await db.collection('users').updateOne(
+        { email },
+        { $set: { passwordHash: hash, role: 'admin', status: 'approved', name: existing.name || process.env.ADMIN_NAME || 'Super Admin' } },
+      )
+      console.log(`[seedAdmin] Synced admin password & role: ${email}`)
+    }
+  } catch (e) {
+    console.error('[seedAdmin] failed:', e.message)
+  }
 }
 
 function handleCORS(response) {
