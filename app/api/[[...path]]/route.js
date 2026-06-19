@@ -26,16 +26,41 @@ export async function OPTIONS() {
   return handleCORS(new NextResponse(null, { status: 200 }))
 }
 
-async function callClaude(systemPrompt, userPrompt) {
-  const apiKey = process.env.EMERGENT_LLM_KEY
-  if (!apiKey) throw new Error('EMERGENT_LLM_KEY not set')
+async function callLLM(systemPrompt, userPrompt) {
+  // Prefer user-provided OpenAI key for unlimited usage
+  const openaiKey = process.env.OPENAI_API_KEY
+  if (openaiKey && openaiKey.startsWith('sk-')) {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 1500,
+        temperature: 0.5,
+      }),
+    })
+    if (!resp.ok) {
+      const errText = await resp.text()
+      throw new Error(`OpenAI: ${errText}`)
+    }
+    const data = await resp.json()
+    return data.choices?.[0]?.message?.content?.trim() || ''
+  }
 
-  // Emergent universal key uses the Emergent LLM gateway (OpenAI-compatible)
+  // Fallback to Emergent gateway
+  const emergentKey = process.env.EMERGENT_LLM_KEY
   const resp = await fetch('https://integrations.emergentagent.com/llm/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${emergentKey}`,
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-5-20250929',
@@ -46,34 +71,10 @@ async function callClaude(systemPrompt, userPrompt) {
       max_tokens: 1500,
     }),
   })
-
   if (!resp.ok) {
     const errText = await resp.text()
-    console.error('LLM error', resp.status, errText)
-    // Fallback: try Anthropic-style endpoint
-    const resp2 = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 1500,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    })
-    if (!resp2.ok) {
-      const errText2 = await resp2.text()
-      console.error('Anthropic direct error', resp2.status, errText2)
-      throw new Error(`LLM call failed: ${errText2}`)
-    }
-    const data2 = await resp2.json()
-    return (data2.content || []).map(c => c.text || '').join('\n').trim()
+    throw new Error(`LLM: ${errText}`)
   }
-
   const data = await resp.json()
   return data.choices?.[0]?.message?.content?.trim() || ''
 }
@@ -90,38 +91,48 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json({ message: 'LetterHead Pro API' }))
     }
 
-    // AI: generate letter body
     if (route === '/ai/generate' && method === 'POST') {
       const body = await request.json()
       const { prompt, company = {}, tone = 'professional' } = body
-      if (!prompt) {
-        return handleCORS(NextResponse.json({ error: 'prompt is required' }, { status: 400 }))
-      }
-      const sys = `You are an expert business letter writer. Write a clear, ${tone}, well-structured letter body in plain prose. Do NOT include sender address, date, recipient address, or signatures — only the letter content (salutation + paragraphs + closing line like 'Sincerely,'). Keep it concise (3-5 short paragraphs). Use the company context if provided.`
+      if (!prompt) return handleCORS(NextResponse.json({ error: 'prompt is required' }, { status: 400 }))
+      const sys = `You are an expert business letter writer. Write a clear, ${tone}, well-structured letter body in plain prose. Do NOT include sender address, date, recipient address, header, footer, or contact info — only the letter content (salutation + paragraphs + closing line like 'Sincerely,'). Use the company context if provided to personalise tone and references. Avoid markdown. Use 3-6 short paragraphs.`
       const ctx = company && company.businessName ? `\n\nCompany context: ${JSON.stringify(company)}` : ''
-      const text = await callClaude(sys, prompt + ctx)
+      const text = await callLLM(sys, prompt + ctx)
       return handleCORS(NextResponse.json({ body: text }))
     }
 
-    // Save letterhead
     if (route === '/letterheads' && method === 'POST') {
       const body = await request.json()
       const doc = {
-        id: uuidv4(),
-        title: body.title || 'Untitled Letterhead',
+        id: body.id || uuidv4(),
+        title: body.title || (body.company?.businessName ? `${body.company.businessName} — Letter` : 'Untitled Letterhead'),
         company: body.company || {},
         template: body.template || 'corporate-blue',
         letterBody: body.letterBody || '',
+        signature: body.signature || '',
         createdAt: new Date(),
       }
-      await db.collection('letterheads').insertOne(doc)
-      return handleCORS(NextResponse.json(doc))
+      await db.collection('letterheads').updateOne({ id: doc.id }, { $set: doc }, { upsert: true })
+      const { _id, ...clean } = doc
+      return handleCORS(NextResponse.json(clean))
     }
 
     if (route === '/letterheads' && method === 'GET') {
       const items = await db.collection('letterheads').find({}).sort({ createdAt: -1 }).limit(50).toArray()
-      const cleaned = items.map(({ _id, ...rest }) => rest)
-      return handleCORS(NextResponse.json(cleaned))
+      return handleCORS(NextResponse.json(items.map(({ _id, ...rest }) => rest)))
+    }
+
+    const lhMatch = route.match(/^\/letterheads\/([^/]+)$/)
+    if (lhMatch && method === 'GET') {
+      const id = lhMatch[1]
+      const item = await db.collection('letterheads').findOne({ id })
+      if (!item) return handleCORS(NextResponse.json({ error: 'Not found' }, { status: 404 }))
+      const { _id, ...rest } = item
+      return handleCORS(NextResponse.json(rest))
+    }
+    if (lhMatch && method === 'DELETE') {
+      await db.collection('letterheads').deleteOne({ id: lhMatch[1] })
+      return handleCORS(NextResponse.json({ ok: true }))
     }
 
     return handleCORS(NextResponse.json({ error: `Route ${route} not found` }, { status: 404 }))

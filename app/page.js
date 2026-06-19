@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { TEMPLATES } from '@/lib/templates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,10 +10,12 @@ import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import {
   FileText, Sparkles, Image as ImageIcon, Building2,
-  Phone, Mail, Globe, MapPin, Hash, Loader2, FileImage, FileDown, Palette
+  Phone, Mail, Globe, MapPin, Hash, Loader2, FileImage, FileDown, Palette,
+  PenLine, FolderOpen, Save, Trash2, Plus,
 } from 'lucide-react'
 
 const defaultCompany = {
@@ -28,43 +30,38 @@ const defaultCompany = {
   website: 'www.acmeconsulting.in',
   phone: '+91 98765 43210',
   whatsapp: '+91 98765 43210',
-  address: '12th Floor, Tower B, Cyber Square, Andheri East, Mumbai \u2013 400093, India',
+  address: '12th Floor, Tower B, Cyber Square, Andheri East, Mumbai – 400093, India',
   logo: '',
 }
 
-const defaultLetter = `Dear Sir/Madam,
+const defaultLetter = `Dear Sir/Madam,\n\nWe hope this letter finds you well. We are pleased to share an update on our recent engagement and the next steps for the upcoming quarter.\n\nOur team has reviewed the proposal in detail, and we are confident the outlined approach will deliver meaningful value to your organisation. We have included a tentative timeline and resource plan for your reference.\n\nPlease feel free to reach out should you require any clarifications. We look forward to your response and to continuing our productive association.\n\nSincerely,`
 
-We hope this letter finds you well. We are pleased to share an update on our recent engagement and the next steps for the upcoming quarter.
-
-Our team has reviewed the proposal in detail, and we are confident the outlined approach will deliver meaningful value to your organisation. We have included a tentative timeline and resource plan for your reference.
-
-Please feel free to reach out should you require any clarifications. We look forward to your response and to continuing our productive association.
-
-Sincerely,`
-
-function LetterheadPreview({ company, template, letterBody, refEl }) {
+// A4 dimensions at 96dpi roughly: 794 x 1123. We render header+footer fixed, body flows.
+// For multi-page PDF, we render hidden full-content version offscreen then slice canvas.
+function LetterheadDoc({ company, template, letterBody, signature, refEl, paginated = false }) {
   const t = template
-  const headerBg =
-    t.headerStyle === 'gradient'
-      ? `linear-gradient(135deg, ${t.primary} 0%, ${t.accent} 100%)`
-      : t.primary
+  const headerBg = t.headerStyle === 'gradient'
+    ? `linear-gradient(135deg, ${t.primary} 0%, ${t.accent} 100%)`
+    : t.primary
 
   return (
     <div
       ref={refEl}
-      id="letterhead-canvas"
+      className="letterhead-doc"
       style={{
         width: '794px',
-        minHeight: '1123px',
+        minHeight: paginated ? 'auto' : '1123px',
         background: '#ffffff',
         fontFamily: t.font === 'Georgia' ? 'Georgia, serif' : 'Inter, system-ui, sans-serif',
         color: '#111827',
         margin: '0 auto',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+        boxShadow: paginated ? 'none' : '0 20px 60px rgba(0,0,0,0.15)',
         position: 'relative',
         overflow: 'hidden',
+        paddingBottom: '92px', // reserve footer area
       }}
     >
+      {/* ===== HEADERS ===== */}
       {t.headerStyle === 'minimal' && (
         <div style={{ padding: '40px 56px 24px', borderBottom: `3px solid ${t.accent}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
@@ -78,14 +75,7 @@ function LetterheadPreview({ company, template, letterBody, refEl }) {
       )}
 
       {(t.headerStyle === 'gradient' || t.headerStyle === 'classic') && (
-        <div
-          style={{
-            background: headerBg,
-            color: '#ffffff',
-            padding: '32px 56px',
-            borderBottom: t.headerStyle === 'classic' ? `6px double ${t.accent}` : 'none',
-          }}
-        >
+        <div style={{ background: headerBg, color: '#ffffff', padding: '32px 56px', borderBottom: t.headerStyle === 'classic' ? `6px double ${t.accent}` : 'none' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
               {company.logo && <img src={company.logo} alt="logo" style={{ height: 68, width: 68, objectFit: 'contain', background: '#fff', borderRadius: 8, padding: 6 }} />}
@@ -132,35 +122,32 @@ function LetterheadPreview({ company, template, letterBody, refEl }) {
         </div>
       )}
 
+      {/* DATE + REF */}
       <div style={{ padding: '20px 56px 0', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}>
         <div>Ref: ___________________</div>
         <div>Date: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
       </div>
 
-      <div
-        style={{
-          padding: '28px 56px 40px',
-          fontSize: 14,
-          lineHeight: 1.75,
-          whiteSpace: 'pre-wrap',
-          minHeight: 520,
-          color: '#1f2937',
-        }}
-      >
+      {/* BODY */}
+      <div style={{ padding: '28px 56px 20px', fontSize: 14, lineHeight: 1.75, whiteSpace: 'pre-wrap', color: '#1f2937', minHeight: paginated ? 'auto' : 520 }}>
         {letterBody}
       </div>
 
-      <div style={{ padding: '0 56px 24px', fontSize: 13, color: '#1f2937' }}>
-        <div style={{ marginTop: 32, fontWeight: 600 }}>For {company.businessName}</div>
-        <div style={{ marginTop: 48, borderTop: '1px solid #d1d5db', width: 220, paddingTop: 6, fontSize: 12 }}>
+      {/* SIGNATURE */}
+      <div style={{ padding: '0 56px 32px', fontSize: 13, color: '#1f2937' }}>
+        <div style={{ marginTop: 24, fontWeight: 600 }}>For {company.businessName}</div>
+        {signature && <img src={signature} alt="signature" style={{ height: 60, marginTop: 8, objectFit: 'contain' }} />}
+        <div style={{ marginTop: signature ? 8 : 48, borderTop: '1px solid #d1d5db', width: 220, paddingTop: 6, fontSize: 12 }}>
           {company.ownerName || 'Authorised Signatory'}
         </div>
       </div>
 
+      {/* FOOTER (absolute at bottom of A4 sheet on single page, normal flow when paginated) */}
       <div
+        className="letterhead-footer"
         style={{
-          position: 'absolute',
-          bottom: 0,
+          position: paginated ? 'relative' : 'absolute',
+          bottom: paginated ? 'auto' : 0,
           left: 0,
           right: 0,
           background: t.headerStyle === 'minimal' ? '#f9fafb' : t.primary,
@@ -171,11 +158,7 @@ function LetterheadPreview({ company, template, letterBody, refEl }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          {company.address && (
-            <div style={{ maxWidth: '55%' }}>
-              <span style={{ fontWeight: 700 }}>{'\u25CF '}</span>{company.address}
-            </div>
-          )}
+          {company.address && (<div style={{ maxWidth: '55%' }}><span style={{ fontWeight: 700 }}>{'\u25CF '}</span>{company.address}</div>)}
           <div style={{ textAlign: 'right', lineHeight: 1.7 }}>
             {company.phone && <div>Tel: {company.phone}</div>}
             {company.email && <div>{company.email}</div>}
@@ -196,47 +179,94 @@ function Field({ label, value, onChange, icon }) {
   )
 }
 
+function LibraryDialog({ open, onOpenChange, onLoad }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    fetch('/api/letterheads').then(r => r.json()).then(d => setItems(Array.isArray(d) ? d : [])).finally(() => setLoading(false))
+  }, [open])
+
+  const remove = async (id) => {
+    await fetch(`/api/letterheads/${id}`, { method: 'DELETE' })
+    setItems(items.filter(i => i.id !== id))
+    toast.success('Deleted')
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader><DialogTitle>My Letterheads</DialogTitle></DialogHeader>
+        {loading ? (
+          <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-12 text-slate-500 text-sm">No saved letterheads yet. Click <b>Save</b> to add one.</div>
+        ) : (
+          <ScrollArea className="max-h-[60vh]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {items.map(it => {
+                const tpl = TEMPLATES.find(t => t.id === it.template) || TEMPLATES[0]
+                return (
+                  <div key={it.id} className="border rounded-lg p-3 hover:shadow-md transition group">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-14 rounded shrink-0" style={{ background: `linear-gradient(135deg, ${tpl.primary}, ${tpl.accent})` }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm truncate">{it.title}</div>
+                        <div className="text-xs text-slate-500">{tpl.name} · {new Date(it.createdAt).toLocaleDateString()}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" className="flex-1" onClick={() => { onLoad(it); onOpenChange(false) }}>Open</Button>
+                      <Button size="sm" variant="outline" onClick={() => remove(it.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </ScrollArea>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function App() {
+  const [currentId, setCurrentId] = useState(null)
   const [company, setCompany] = useState(defaultCompany)
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id)
   const [letterBody, setLetterBody] = useState(defaultLetter)
+  const [signature, setSignature] = useState('')
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const previewRef = useRef(null)
+  const hiddenRef = useRef(null)
 
   const template = TEMPLATES.find((t) => t.id === templateId) || TEMPLATES[0]
   const updateCompany = (k, v) => setCompany((c) => ({ ...c, [k]: v }))
 
   const onLogoUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => updateCompany('logo', reader.result)
-    reader.readAsDataURL(file)
+    const file = e.target.files?.[0]; if (!file) return
+    const r = new FileReader(); r.onload = () => updateCompany('logo', r.result); r.readAsDataURL(file)
+  }
+  const onSignatureUpload = (e) => {
+    const file = e.target.files?.[0]; if (!file) return
+    const r = new FileReader(); r.onload = () => setSignature(r.result); r.readAsDataURL(file)
   }
 
   const generateAI = async () => {
-    if (!aiPrompt.trim()) {
-      toast.error('Describe the letter you want to generate')
-      return
-    }
+    if (!aiPrompt.trim()) return toast.error('Describe the letter you want')
     setAiLoading(true)
     try {
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: aiPrompt, company, tone: 'professional' }),
-      })
+      const res = await fetch('/api/ai/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: aiPrompt, company, tone: 'professional' }) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'AI failed')
       setLetterBody(data.body)
       toast.success('Letter generated!')
-    } catch (e) {
-      toast.error(e.message)
-    } finally {
-      setAiLoading(false)
-    }
+    } catch (e) { toast.error(e.message) } finally { setAiLoading(false) }
   }
 
   const downloadPDF = async () => {
@@ -244,45 +274,77 @@ function App() {
     try {
       const html2canvas = (await import('html2canvas')).default
       const { jsPDF } = await import('jspdf')
-      const node = previewRef.current
+      const node = hiddenRef.current
       if (!node) return
+      // Render the full-flow doc (paginated=true means body flows naturally + footer in normal flow)
       const canvas = await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
-      const imgData = canvas.toDataURL('image/jpeg', 0.95)
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
       const pageWidth = pdf.internal.pageSize.getWidth()
       const pageHeight = pdf.internal.pageSize.getHeight()
-      pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight)
-      pdf.save(`${company.businessName.replace(/\s+/g, '_')}_letterhead.pdf`)
+      const imgWidth = pageWidth
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+      let heightLeft = imgHeight
+      let position = 0
+      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
+      pdf.save(`${(company.businessName || 'letterhead').replace(/\s+/g, '_')}.pdf`)
       toast.success('PDF downloaded')
-    } catch (e) {
-      toast.error('Export failed: ' + e.message)
-    } finally {
-      setExporting(false)
-    }
+    } catch (e) { toast.error('Export failed: ' + e.message) } finally { setExporting(false) }
   }
 
   const downloadPNG = async () => {
     setExporting(true)
     try {
       const html2canvas = (await import('html2canvas')).default
-      const node = previewRef.current
-      const canvas = await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+      const canvas = await html2canvas(previewRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
       const link = document.createElement('a')
-      link.download = `${company.businessName.replace(/\s+/g, '_')}_letterhead.png`
+      link.download = `${(company.businessName || 'letterhead').replace(/\s+/g, '_')}.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
       toast.success('PNG downloaded')
-    } catch (e) {
-      toast.error('Export failed')
-    } finally {
-      setExporting(false)
-    }
+    } catch (e) { toast.error('Export failed') } finally { setExporting(false) }
+  }
+
+  const saveLetterhead = async () => {
+    try {
+      const payload = { id: currentId || undefined, title: `${company.businessName} — ${template.name}`, company, template: templateId, letterBody, signature }
+      const res = await fetch('/api/letterheads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Save failed')
+      setCurrentId(data.id)
+      toast.success('Saved to library')
+    } catch (e) { toast.error(e.message) }
+  }
+
+  const loadLetterhead = (it) => {
+    setCurrentId(it.id)
+    setCompany(it.company || defaultCompany)
+    setTemplateId(it.template || TEMPLATES[0].id)
+    setLetterBody(it.letterBody || '')
+    setSignature(it.signature || '')
+    toast.success(`Loaded “${it.title}”`)
+  }
+
+  const newDoc = () => {
+    setCurrentId(null)
+    setCompany(defaultCompany)
+    setTemplateId(TEMPLATES[0].id)
+    setLetterBody(defaultLetter)
+    setSignature('')
+    toast.success('New letterhead')
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100">
       <header className="sticky top-0 z-30 backdrop-blur-lg bg-white/70 border-b border-slate-200/60">
-        <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center justify-between">
+        <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/30">
               <FileText className="w-5 h-5 text-white" />
@@ -292,19 +354,22 @@ function App() {
               <div className="text-xs text-slate-500 leading-tight">Create professional letterheads in minutes</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={downloadPNG} disabled={exporting} className="gap-2">
-              <FileImage className="w-4 h-4" /> PNG
-            </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="ghost" onClick={newDoc} className="gap-2"><Plus className="w-4 h-4" /> New</Button>
+            <Button variant="outline" onClick={() => setLibraryOpen(true)} className="gap-2"><FolderOpen className="w-4 h-4" /> Library</Button>
+            <Button variant="outline" onClick={saveLetterhead} className="gap-2"><Save className="w-4 h-4" /> Save</Button>
+            <Button variant="outline" onClick={downloadPNG} disabled={exporting} className="gap-2"><FileImage className="w-4 h-4" /> PNG</Button>
             <Button onClick={downloadPDF} disabled={exporting} className="gap-2 bg-blue-600 hover:bg-blue-700">
-              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-              Download PDF
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} Download PDF
             </Button>
           </div>
         </div>
       </header>
 
+      <LibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} onLoad={loadLetterhead} />
+
       <div className="max-w-[1600px] mx-auto px-6 py-6 grid grid-cols-12 gap-6">
+        {/* LEFT */}
         <div className="col-span-12 lg:col-span-3">
           <Card className="p-0 overflow-hidden border-slate-200/70 shadow-sm">
             <Tabs defaultValue="company" className="w-full">
@@ -320,17 +385,17 @@ function App() {
                     <div>
                       <Label className="text-xs">Logo</Label>
                       <div className="mt-1 flex items-center gap-3">
-                        {company.logo ? (
-                          <img src={company.logo} alt="logo" className="w-14 h-14 object-contain border rounded-lg bg-white" />
-                        ) : (
-                          <div className="w-14 h-14 border-2 border-dashed rounded-lg flex items-center justify-center text-slate-400">
-                            <ImageIcon className="w-5 h-5" />
-                          </div>
-                        )}
-                        <label className="cursor-pointer text-xs px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 transition">
-                          Upload
-                          <input type="file" accept="image/*" onChange={onLogoUpload} className="hidden" />
-                        </label>
+                        {company.logo ? <img src={company.logo} alt="logo" className="w-14 h-14 object-contain border rounded-lg bg-white" /> : <div className="w-14 h-14 border-2 border-dashed rounded-lg flex items-center justify-center text-slate-400"><ImageIcon className="w-5 h-5" /></div>}
+                        <label className="cursor-pointer text-xs px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 transition">Upload<input type="file" accept="image/*" onChange={onLogoUpload} className="hidden" /></label>
+                        {company.logo && <button onClick={() => updateCompany('logo', '')} className="text-xs text-red-500 hover:underline">Remove</button>}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs flex items-center gap-1"><PenLine className="w-3 h-3" />Signature (optional)</Label>
+                      <div className="mt-1 flex items-center gap-3">
+                        {signature ? <img src={signature} alt="signature" className="h-10 object-contain border rounded bg-white px-2" /> : <div className="h-10 px-3 border-2 border-dashed rounded flex items-center justify-center text-slate-400 text-xs">No signature</div>}
+                        <label className="cursor-pointer text-xs px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 transition">Upload<input type="file" accept="image/*" onChange={onSignatureUpload} className="hidden" /></label>
+                        {signature && <button onClick={() => setSignature('')} className="text-xs text-red-500 hover:underline">Remove</button>}
                       </div>
                     </div>
                     <Separator />
@@ -348,12 +413,7 @@ function App() {
                     <Field icon={<Globe className="w-3 h-3" />} label="Website" value={company.website} onChange={(v) => updateCompany('website', v)} />
                     <div>
                       <Label className="text-xs flex items-center gap-1"><MapPin className="w-3 h-3" />Address</Label>
-                      <Textarea
-                        value={company.address}
-                        onChange={(e) => updateCompany('address', e.target.value)}
-                        className="mt-1 text-xs"
-                        rows={3}
-                      />
+                      <Textarea value={company.address} onChange={(e) => updateCompany('address', e.target.value)} className="mt-1 text-xs" rows={3} />
                     </div>
                   </div>
                 </ScrollArea>
@@ -362,16 +422,12 @@ function App() {
               <TabsContent value="design" className="m-0">
                 <ScrollArea className="h-[calc(100vh-180px)]">
                   <div className="p-4 space-y-3">
-                    <div className="text-xs text-slate-500 mb-2">Pick a template style</div>
+                    <div className="text-xs text-slate-500 mb-2">Pick a template style ({TEMPLATES.length} designs)</div>
                     <div className="grid grid-cols-1 gap-2">
                       {TEMPLATES.map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => setTemplateId(t.id)}
-                          className={`text-left p-3 rounded-lg border-2 transition ${templateId === t.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
-                        >
+                        <button key={t.id} onClick={() => setTemplateId(t.id)} className={`text-left p-3 rounded-lg border-2 transition ${templateId === t.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300 bg-white'}`}>
                           <div className="flex items-center gap-3">
-                            <div className="w-6 h-10 rounded" style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.accent})` }} />
+                            <div className="w-6 h-10 rounded shrink-0" style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.accent})` }} />
                             <div>
                               <div className="font-semibold text-sm">{t.name}</div>
                               <div className="text-[10px] text-slate-500 uppercase tracking-wide">{t.category}</div>
@@ -387,26 +443,18 @@ function App() {
               <TabsContent value="ai" className="m-0">
                 <div className="p-4 space-y-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-                      <Sparkles className="w-4 h-4 text-white" />
-                    </div>
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center"><Sparkles className="w-4 h-4 text-white" /></div>
                     <div>
                       <div className="font-semibold text-sm">AI Letter Writer</div>
-                      <div className="text-xs text-slate-500">Powered by Claude Sonnet 4.5</div>
+                      <div className="text-xs text-slate-500">Powered by GPT-4o-mini</div>
                     </div>
                   </div>
-                  <Textarea
-                    placeholder={'e.g. Write a formal letter to a client confirming the engagement for FY 2025-26 GST filings and outline next steps.'}
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    rows={6}
-                    className="text-sm"
-                  />
+                  <Textarea placeholder={'e.g. Write a formal letter to a client confirming the engagement for FY 2025-26 GST filings and outline next steps.'} value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={6} className="text-sm" />
                   <Button onClick={generateAI} disabled={aiLoading} className="w-full gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700">
                     {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                     {aiLoading ? 'Generating...' : 'Generate Letter Body'}
                   </Button>
-                  <div className="text-[11px] text-slate-500">Tip: Mention recipient, purpose & tone. The AI uses your company profile as context.</div>
+                  <div className="text-[11px] text-slate-500">Tip: Mention recipient, purpose & tone. AI uses your company profile as context.</div>
                   <Separator />
                   <div className="space-y-1">
                     <div className="text-xs font-semibold mb-1">Quick prompts</div>
@@ -415,10 +463,10 @@ function App() {
                       'NOC letter for a vendor partnership',
                       'Appointment letter for a new employee joining as Senior Consultant',
                       'Formal request for proposal extension',
+                      'Thank you letter to a donor for their contribution',
+                      'Medical fitness certificate for a patient resuming work',
                     ].map((q) => (
-                      <button key={q} onClick={() => setAiPrompt(q)} className="block w-full text-left text-xs p-2 rounded hover:bg-slate-100 text-slate-600">
-                        {'\u2192 '}{q}
-                      </button>
+                      <button key={q} onClick={() => setAiPrompt(q)} className="block w-full text-left text-xs p-2 rounded hover:bg-slate-100 text-slate-600">{'\u2192 '}{q}</button>
                     ))}
                   </div>
                 </div>
@@ -427,37 +475,41 @@ function App() {
           </Card>
         </div>
 
+        {/* CENTER */}
         <div className="col-span-12 lg:col-span-6">
           <Card className="p-6 bg-slate-100/60 border-slate-200/70 overflow-auto">
             <div className="text-xs text-slate-500 mb-3 flex items-center justify-between">
-              <span>Live preview — A4 size</span>
+              <span>Live preview — A4 size {currentId && <span className="ml-2 text-emerald-600 font-medium">• saved</span>}</span>
               <span className="font-mono">{template.name}</span>
             </div>
             <div className="flex justify-center" style={{ transform: 'scale(0.78)', transformOrigin: 'top center', marginBottom: '-220px' }}>
-              <LetterheadPreview company={company} template={template} letterBody={letterBody} refEl={previewRef} />
+              <LetterheadDoc company={company} template={template} letterBody={letterBody} signature={signature} refEl={previewRef} />
             </div>
           </Card>
         </div>
 
+        {/* RIGHT */}
         <div className="col-span-12 lg:col-span-3">
           <Card className="p-4 border-slate-200/70 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <Label className="text-sm font-semibold">Letter Body</Label>
               <div className="text-xs text-slate-500">{letterBody.length} chars</div>
             </div>
-            <Textarea
-              value={letterBody}
-              onChange={(e) => setLetterBody(e.target.value)}
-              rows={28}
-              className="text-sm font-mono leading-relaxed"
-              placeholder="Type your letter content here, or use AI to generate it..."
-            />
+            <Textarea value={letterBody} onChange={(e) => setLetterBody(e.target.value)} rows={28} className="text-sm font-mono leading-relaxed" placeholder="Type your letter content here, or use AI to generate it..." />
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" onClick={() => setLetterBody(defaultLetter)}>Reset</Button>
+              <Button variant="outline" size="sm" onClick={() => setLetterBody(defaultLetter)}>Reset sample</Button>
               <Button variant="outline" size="sm" onClick={() => setLetterBody('')}>Clear</Button>
+            </div>
+            <div className="mt-3 text-[11px] text-slate-500 leading-relaxed">
+              💡 Long letters auto-flow across multiple pages in the PDF. The preview shows page 1 only.
             </div>
           </Card>
         </div>
+      </div>
+
+      {/* Hidden offscreen full-flow doc for multi-page PDF export */}
+      <div style={{ position: 'fixed', left: -10000, top: 0, opacity: 0, pointerEvents: 'none' }} aria-hidden>
+        <LetterheadDoc company={company} template={template} letterBody={letterBody} signature={signature} refEl={hiddenRef} paginated />
       </div>
     </div>
   )
