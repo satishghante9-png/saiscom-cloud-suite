@@ -109,21 +109,64 @@ async function addNotification(db, { type, userId, userEmail, message }) {
 }
 
 async function callLLM(systemPrompt, userPrompt) {
+  const errors = []
+
+  // Try Emergent universal LLM gateway FIRST (it auto-routes to best available model)
+  const emergentKey = process.env.EMERGENT_LLM_KEY
+  if (emergentKey) {
+    try {
+      const resp = await fetch('https://integrations.emergentagent.com/llm/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${emergentKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          max_tokens: 1500, temperature: 0.5,
+        }),
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        const text = data.choices?.[0]?.message?.content?.trim() || ''
+        if (text) return text
+      } else {
+        errors.push(`Emergent: ${(await resp.text()).slice(0, 200)}`)
+      }
+    } catch (e) { errors.push(`Emergent network: ${e.message}`) }
+  }
+
+  // Fall back to direct OpenAI if a user-provided key is set with billing
   const openaiKey = process.env.OPENAI_API_KEY
   if (openaiKey && openaiKey.startsWith('sk-')) {
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], max_tokens: 1500, temperature: 0.5 }),
-    })
-    if (!resp.ok) throw new Error(`OpenAI: ${await resp.text()}`)
-    return (await resp.json()).choices?.[0]?.message?.content?.trim() || ''
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          max_tokens: 1500, temperature: 0.5,
+        }),
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        const text = data.choices?.[0]?.message?.content?.trim() || ''
+        if (text) return text
+      } else {
+        errors.push(`OpenAI: ${(await resp.text()).slice(0, 200)}`)
+      }
+    } catch (e) { errors.push(`OpenAI network: ${e.message}`) }
   }
-  const resp = await fetch('https://integrations.emergentagent.com/llm/chat/completions', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.EMERGENT_LLM_KEY}` },
-    body: JSON.stringify({ model: 'claude-sonnet-4-5-20250929', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], max_tokens: 1500 }),
-  })
-  if (!resp.ok) throw new Error(`LLM: ${await resp.text()}`)
-  return (await resp.json()).choices?.[0]?.message?.content?.trim() || ''
+
+  // Build a clean user-facing error
+  const combinedErr = errors.join(' | ')
+  if (combinedErr.includes('budget_exceeded')) {
+    throw new Error('AI service quota temporarily exhausted. Please try again in a few minutes or contact support.')
+  }
+  if (combinedErr.includes('insufficient_quota')) {
+    throw new Error('AI service billing not configured. Please contact admin to top up the API key.')
+  }
+  if (!emergentKey && !openaiKey) {
+    throw new Error('No AI provider configured. Please contact admin.')
+  }
+  throw new Error(`AI service unavailable. (${combinedErr || 'unknown error'})`)
 }
 
 async function handleRoute(request, { params }) {
