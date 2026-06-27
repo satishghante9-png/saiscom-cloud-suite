@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { DEFAULT_SITE_CONTENT } from '@/lib/defaultSiteContent'
 
 const ADMIN_EMAIL = 'admin@saiscom.in'
 
@@ -134,6 +135,34 @@ async function handleRoute(request, { params }) {
     const db = await connectToMongo()
 
     if (route === '/' && method === 'GET') return handleCORS(NextResponse.json({ message: 'LetterHead Pro API' }))
+
+    // ====================== SITE CONTENT (public GET) ======================
+    if (route === '/site-content' && method === 'GET') {
+      let doc = await db.collection('siteContent').findOne({ id: 'main' })
+      if (!doc) {
+        doc = { ...DEFAULT_SITE_CONTENT }
+        await db.collection('siteContent').insertOne(doc)
+      }
+      const { _id, ...clean } = doc
+      return handleCORS(NextResponse.json(clean))
+    }
+
+    // Admin update site content
+    if (route === '/admin/site-content' && method === 'PUT') {
+      const me = await getFullUserFromRequest(request, db)
+      if (!me || me.role !== 'admin') return handleCORS(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      const body = await request.json()
+      const update = {
+        currency: body.currency || '\u20B9',
+        hero: body.hero || DEFAULT_SITE_CONTENT.hero,
+        features: Array.isArray(body.features) ? body.features : DEFAULT_SITE_CONTENT.features,
+        pricingPlans: Array.isArray(body.pricingPlans) ? body.pricingPlans : DEFAULT_SITE_CONTENT.pricingPlans,
+        footer: body.footer || DEFAULT_SITE_CONTENT.footer,
+        updatedAt: new Date(),
+      }
+      await db.collection('siteContent').updateOne({ id: 'main' }, { $set: { id: 'main', ...update } }, { upsert: true })
+      return handleCORS(NextResponse.json({ ok: true, ...update, id: 'main' }))
+    }
 
     // ====================== AUTH ======================
     if (route === '/auth/signup' && method === 'POST') {

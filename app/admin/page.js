@@ -12,9 +12,11 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { SiteContentEditor } from '@/components/SiteContentEditor'
 import {
   Shield, Users, CheckCircle2, XCircle, FileQuestion, Bell, Loader2, ArrowLeft,
   Mail, Calendar, IndianRupee, FileText, Eye, ExternalLink, Image as ImageIcon, Clock,
+  Settings,
 } from 'lucide-react'
 
 const STATUS_META = {
@@ -333,6 +335,7 @@ export default function AdminPage() {
               <Bell className="w-4 h-4" />Notifications
               {unreadCount > 0 && <Badge className="ml-1 bg-red-500 text-white">{unreadCount}</Badge>}
             </TabsTrigger>
+            <TabsTrigger value="site" className="gap-2"><Settings className="w-4 h-4" />Site & Pricing</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="mt-4 space-y-4">
@@ -383,6 +386,10 @@ export default function AdminPage() {
                 ))}
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="site" className="mt-4">
+            <SiteContentEditor />
           </TabsContent>
         </Tabs>
       </div>

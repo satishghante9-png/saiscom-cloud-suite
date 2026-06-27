@@ -1,822 +1,340 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { TEMPLATES } from '@/lib/templates'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Card } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { AuthDialog } from '@/components/AuthDialog'
-import { ChangePasswordDialog } from '@/components/ChangePasswordDialog'
-import { toast } from 'sonner'
 import {
-  FileText, Sparkles, Image as ImageIcon, Building2,
-  Phone, Mail, Globe, MapPin, Hash, Loader2, FileImage, FileDown, Palette,
-  PenLine, FolderOpen, Save, Trash2, Plus, LogIn, LogOut, UserCircle, CalendarDays,
-  Lock, Shield, Clock, CheckCircle2, XCircle, FileQuestion, Upload, AlertCircle, KeyRound,
+  FileText, Sparkles, FileDown, Save, PenLine, Shield, Check, ArrowRight,
+  Star, Zap, Crown, Loader2,
 } from 'lucide-react'
 
-const defaultCompany = {
-  businessName: 'Acme Consulting LLP',
-  tagline: 'Strategy. Growth. Excellence.',
-  ownerName: 'Mr. Rajiv Sharma, Managing Partner',
-  gst: '27AAACA1234B1Z5',
-  pan: 'AAACA1234B',
-  cin: 'U74999MH2020LLP123456',
-  regNo: 'LLP-2020/01234',
-  email: 'hello@acmeconsulting.in',
-  website: 'www.acmeconsulting.in',
-  phone: '+91 98765 43210',
-  whatsapp: '+91 98765 43210',
-  address: '12th Floor, Tower B, Cyber Square, Andheri East, Mumbai – 400093, India',
-  logo: '',
+const ICON_MAP = {
+  FileText, Sparkles, FileDown, Save, PenLine, Shield,
 }
 
-const defaultLetter = `Dear Sir/Madam,\n\nWe hope this letter finds you well. We are pleased to share an update on our recent engagement and the next steps for the upcoming quarter.\n\nOur team has reviewed the proposal in detail, and we are confident the outlined approach will deliver meaningful value to your organisation. We have included a tentative timeline and resource plan for your reference.\n\nPlease feel free to reach out should you require any clarifications. We look forward to your response and to continuing our productive association.\n\nSincerely,`
+const BUTTON_COLORS = {
+  blue:    'bg-blue-600 hover:bg-blue-700 text-white',
+  indigo:  'bg-indigo-600 hover:bg-indigo-700 text-white',
+  emerald: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+  amber:   'bg-amber-500 hover:bg-amber-600 text-white',
+  rose:    'bg-rose-600 hover:bg-rose-700 text-white',
+  slate:   'bg-slate-900 hover:bg-slate-800 text-white',
+}
 
-// A4 dimensions at 96dpi roughly: 794 x 1123. We render header+footer fixed, body flows.
-// For multi-page PDF, we render hidden full-content version offscreen then slice canvas.
-function LetterheadDoc({ company, template, letterBody, signature, letterMeta = {}, refEl, paginated = false }) {
-  const t = template
-  const headerBg = t.headerStyle === 'gradient'
-    ? `linear-gradient(135deg, ${t.primary} 0%, ${t.accent} 100%)`
-    : t.primary
+const HIGHLIGHT_STYLES = {
+  'Most Popular': { ring: 'ring-2 ring-indigo-500', badge: 'bg-indigo-600', icon: Star },
+  'Best Value':   { ring: 'ring-2 ring-emerald-500', badge: 'bg-emerald-600', icon: Crown },
+  'Recommended':  { ring: 'ring-2 ring-blue-500', badge: 'bg-blue-600', icon: Zap },
+}
 
-  // Format date: accept YYYY-MM-DD or empty -> today
-  const dateText = (() => {
-    const raw = letterMeta?.date
-    let d
-    if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      const [y, m, day] = raw.split('-').map(Number)
-      d = new Date(y, m - 1, day)
-    } else {
-      d = new Date()
-    }
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
-  })()
-  const refText = letterMeta?.refNo && letterMeta.refNo.trim() ? letterMeta.refNo : '___________________'
+const fadeUp = {
+  hidden: { opacity: 0, y: 30 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.55, ease: 'easeOut' } }),
+}
+
+function PricingCard({ plan, currency, index }) {
+  const router = useRouter()
+  const highlight = HIGHLIGHT_STYLES[plan.highlight]
+  const Icon = highlight?.icon
+  const colorClass = BUTTON_COLORS[plan.buttonColor] || BUTTON_COLORS.blue
 
   return (
-    <div
-      ref={refEl}
-      className="letterhead-doc"
-      style={{
-        width: '794px',
-        minHeight: paginated ? 'auto' : '1123px',
-        background: '#ffffff',
-        fontFamily: t.font === 'Georgia' ? 'Georgia, serif' : 'Inter, system-ui, sans-serif',
-        color: '#111827',
-        margin: '0 auto',
-        boxShadow: paginated ? 'none' : '0 20px 60px rgba(0,0,0,0.15)',
-        position: 'relative',
-        overflow: 'hidden',
-        paddingBottom: '92px', // reserve footer area
-      }}
+    <motion.div
+      custom={index}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: '-50px' }}
+      variants={fadeUp}
+      whileHover={{ y: -6, transition: { duration: 0.2 } }}
+      className={`relative bg-white rounded-2xl shadow-lg ${highlight?.ring || 'ring-1 ring-slate-200'} p-7 flex flex-col ${plan.highlight ? 'lg:scale-105' : ''}`}
     >
-      {/* ===== HEADERS ===== */}
-      {t.headerStyle === 'minimal' && (
-        <div style={{ padding: '40px 56px 24px', borderBottom: `3px solid ${t.accent}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-            {company.logo && <img src={company.logo} alt="logo" style={{ height: 56, width: 56, objectFit: 'contain' }} />}
-            <div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: t.primary, letterSpacing: '-0.02em' }}>{company.businessName}</div>
-              {company.tagline && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{company.tagline}</div>}
-            </div>
-          </div>
+      {plan.highlight && (
+        <div className={`absolute -top-3 left-1/2 -translate-x-1/2 ${highlight.badge} text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1 shadow-md`}>
+          {Icon && <Icon className="w-3 h-3" />} {plan.highlight}
         </div>
       )}
-
-      {(t.headerStyle === 'gradient' || t.headerStyle === 'classic') && (
-        <div style={{ background: headerBg, color: '#ffffff', padding: '32px 56px', borderBottom: t.headerStyle === 'classic' ? `6px double ${t.accent}` : 'none' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-              {company.logo && <img src={company.logo} alt="logo" style={{ height: 68, width: 68, objectFit: 'contain', background: '#fff', borderRadius: 8, padding: 6 }} />}
-              <div>
-                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.02em' }}>{company.businessName}</div>
-                {company.tagline && <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4, fontStyle: 'italic' }}>{company.tagline}</div>}
-              </div>
-            </div>
-            <div style={{ textAlign: 'right', fontSize: 11, lineHeight: 1.6, opacity: 0.95 }}>
-              {company.regNo && <div>Reg: {company.regNo}</div>}
-              {company.cin && <div>CIN: {company.cin}</div>}
-              {company.gst && <div>GST: {company.gst}</div>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {t.headerStyle === 'doubleBorder' && (
-        <div style={{ padding: '36px 56px 20px', borderTop: `8px solid ${t.primary}`, borderBottom: `2px solid ${t.accent}` }}>
-          <div style={{ textAlign: 'center' }}>
-            {company.logo && <img src={company.logo} alt="logo" style={{ height: 64, objectFit: 'contain', marginBottom: 10 }} />}
-            <div style={{ fontSize: 32, fontWeight: 700, color: t.primary, letterSpacing: '0.02em' }}>{company.businessName}</div>
-            {company.tagline && <div style={{ fontSize: 13, color: t.accent, marginTop: 6, fontStyle: 'italic' }}>{company.tagline}</div>}
-            <div style={{ fontSize: 11, color: '#4b5563', marginTop: 8 }}>
-              {[company.regNo && `Reg: ${company.regNo}`, company.gst && `GSTIN: ${company.gst}`, company.pan && `PAN: ${company.pan}`].filter(Boolean).join('  |  ')}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {t.headerStyle === 'sideBar' && (
-        <div style={{ display: 'flex' }}>
-          <div style={{ width: 14, background: `linear-gradient(180deg, ${t.primary}, ${t.accent})` }} />
-          <div style={{ flex: 1, padding: '36px 56px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-              {company.logo && <img src={company.logo} alt="logo" style={{ height: 64, objectFit: 'contain' }} />}
-              <div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: t.primary }}>{company.businessName}</div>
-                {company.tagline && <div style={{ fontSize: 13, color: t.accent, marginTop: 4 }}>{company.tagline}</div>}
-                {company.ownerName && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{company.ownerName}</div>}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DATE + REF */}
-      <div style={{ padding: '20px 56px 0', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}>
-        <div>Ref: {refText}</div>
-        <div>Date: {dateText}</div>
+      <h3 className="text-xl font-bold text-slate-900">{plan.name}</h3>
+      <div className="mt-3 flex items-baseline gap-1">
+        <span className="text-4xl font-extrabold text-slate-900">{currency}{plan.price}</span>
+        <span className="text-sm text-slate-500">/ {plan.billingPeriod?.toLowerCase() || 'month'}</span>
       </div>
-
-      {/* BODY */}
-      <div style={{ padding: '28px 56px 20px', fontSize: 14, lineHeight: 1.75, whiteSpace: 'pre-wrap', color: '#1f2937', minHeight: paginated ? 'auto' : 520 }}>
-        {letterBody}
-      </div>
-
-      {/* SIGNATURE */}
-      <div style={{ padding: '0 56px 32px', fontSize: 13, color: '#1f2937' }}>
-        <div style={{ marginTop: 24, fontWeight: 600 }}>For {company.businessName}</div>
-        {signature && <img src={signature} alt="signature" style={{ height: 60, marginTop: 8, objectFit: 'contain' }} />}
-        <div style={{ marginTop: signature ? 8 : 48, borderTop: '1px solid #d1d5db', width: 220, paddingTop: 6, fontSize: 12 }}>
-          {company.ownerName || 'Authorised Signatory'}
-        </div>
-      </div>
-
-      {/* FOOTER (absolute at bottom of A4 sheet on single page, normal flow when paginated) */}
-      <div
-        className="letterhead-footer"
-        style={{
-          position: paginated ? 'relative' : 'absolute',
-          bottom: paginated ? 'auto' : 0,
-          left: 0,
-          right: 0,
-          background: t.headerStyle === 'minimal' ? '#f9fafb' : t.primary,
-          color: t.headerStyle === 'minimal' ? '#374151' : '#ffffff',
-          padding: '14px 56px',
-          fontSize: 11,
-          borderTop: t.headerStyle === 'minimal' ? `3px solid ${t.accent}` : 'none',
-        }}
+      <ul className="mt-6 space-y-3 flex-1">
+        {(plan.features || []).map((f, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+            <Check className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+            <span>{f}</span>
+          </li>
+        ))}
+      </ul>
+      <Button
+        onClick={() => router.push(plan.buttonLink || '/builder')}
+        disabled={!plan.enabled}
+        className={`mt-7 w-full h-11 gap-2 ${colorClass} font-semibold`}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          {company.address && (<div style={{ maxWidth: '55%' }}><span style={{ fontWeight: 700 }}>{'\u25CF '}</span>{company.address}</div>)}
-          <div style={{ textAlign: 'right', lineHeight: 1.7 }}>
-            {company.phone && <div>Tel: {company.phone}</div>}
-            {company.email && <div>{company.email}</div>}
-            {company.website && <div>{company.website}</div>}
-          </div>
-        </div>
-      </div>
-    </div>
+        {plan.buttonText || 'Subscribe Now'} <ArrowRight className="w-4 h-4" />
+      </Button>
+    </motion.div>
   )
 }
 
-function Field({ label, value, onChange, icon }) {
-  return (
-    <div>
-      <Label className="text-xs flex items-center gap-1">{icon}{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 text-sm h-8" />
-    </div>
-  )
-}
-
-function LibraryDialog({ open, onOpenChange, onLoad }) {
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(false)
+export default function LandingPage() {
+  const router = useRouter()
+  const [content, setContent] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!open) return
-    setLoading(true)
-    fetch('/api/letterheads', { credentials: 'include' }).then(r => r.json()).then(d => setItems(Array.isArray(d) ? d : [])).finally(() => setLoading(false))
-  }, [open])
+    fetch('/api/site-content')
+      .then((r) => r.json())
+      .then((d) => setContent(d))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
 
-  const remove = async (id) => {
-    await fetch(`/api/letterheads/${id}`, { method: 'DELETE', credentials: 'include' })
-    setItems(items.filter(i => i.id !== id))
-    toast.success('Deleted')
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    )
   }
+  if (!content) return null
+
+  const visiblePlans = (content.pricingPlans || [])
+    .filter((p) => p.visible !== false)
+    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader><DialogTitle>My Letterheads</DialogTitle></DialogHeader>
-        {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
-        ) : items.length === 0 ? (
-          <div className="text-center py-12 text-slate-500 text-sm">No saved letterheads yet. Click <b>Save</b> to add one.</div>
-        ) : (
-          <ScrollArea className="max-h-[60vh]">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {items.map(it => {
-                const tpl = TEMPLATES.find(t => t.id === it.template) || TEMPLATES[0]
-                return (
-                  <div key={it.id} className="border rounded-lg p-3 hover:shadow-md transition group">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-14 rounded shrink-0" style={{ background: `linear-gradient(135deg, ${tpl.primary}, ${tpl.accent})` }} />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm truncate">{it.title}</div>
-                        <div className="text-xs text-slate-500">{tpl.name} · {new Date(it.createdAt).toLocaleDateString()}</div>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <Button size="sm" className="flex-1" onClick={() => { onLoad(it); onOpenChange(false) }}>Open</Button>
-                      <Button size="sm" variant="outline" onClick={() => remove(it.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+    <div className="min-h-screen bg-gradient-to-b from-white via-blue-50/30 to-white text-slate-900">
+      {/* Navbar */}
+      <nav className="sticky top-0 z-30 backdrop-blur-lg bg-white/80 border-b border-slate-200/60">
+        <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <FileText className="w-4 h-4 text-white" />
+            </div>
+            <div className="font-bold text-base">LetterHead Pro</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => router.push(content.hero?.ctaSecondary?.link || '/builder')}>Login</Button>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => router.push(content.hero?.ctaPrimary?.link || '/builder')}>
+              Start Free
+            </Button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        {/* Decorative blurs */}
+        <div className="absolute top-20 -left-20 w-96 h-96 bg-blue-400/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 -right-20 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto px-5 py-16 md:py-24 grid lg:grid-cols-2 gap-10 items-center relative">
+          <div>
+            <motion.div initial="hidden" animate="visible" variants={fadeUp}>
+              <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 mb-5 px-3 py-1">✨ Trusted by 1,000+ businesses</Badge>
+            </motion.div>
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7 }}
+              className="text-4xl md:text-6xl lg:text-7xl font-extrabold leading-tight tracking-tight bg-gradient-to-br from-slate-900 via-blue-800 to-indigo-700 bg-clip-text text-transparent"
+            >
+              {content.hero?.title || 'LETTERHEAD PRO'}
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.15 }}
+              className="mt-5 text-lg md:text-xl text-slate-600 max-w-xl leading-relaxed"
+            >
+              {content.hero?.subtitle}
+            </motion.p>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.3 }}
+              className="mt-8 flex flex-wrap gap-3"
+            >
+              {content.hero?.ctaPrimary?.enabled !== false && (
+                <Button
+                  size="lg"
+                  className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-lg shadow-blue-500/40 h-12 px-6 gap-2"
+                  onClick={() => router.push(content.hero?.ctaPrimary?.link || '/builder')}
+                >
+                  {content.hero?.ctaPrimary?.text || 'Start Free Trial'} <ArrowRight className="w-4 h-4" />
+                </Button>
+              )}
+              {content.hero?.ctaSecondary?.enabled !== false && (
+                <Button size="lg" variant="outline" className="h-12 px-6 border-slate-300" onClick={() => router.push(content.hero?.ctaSecondary?.link || '/builder')}>
+                  {content.hero?.ctaSecondary?.text || 'Login'}
+                </Button>
+              )}
+            </motion.div>
+            <div className="mt-7 flex items-center gap-5 text-xs text-slate-500">
+              <div className="flex items-center gap-1.5"><Check className="w-4 h-4 text-emerald-500" /> No credit card</div>
+              <div className="flex items-center gap-1.5"><Check className="w-4 h-4 text-emerald-500" /> Cancel anytime</div>
+              <div className="flex items-center gap-1.5"><Check className="w-4 h-4 text-emerald-500" /> India-focused (GST/PAN/CIN)</div>
+            </div>
+          </div>
+
+          {/* Hero Visual */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="relative"
+          >
+            {content.hero?.image ? (
+              <img src={content.hero.image} alt="Hero" className="rounded-xl shadow-2xl w-full" />
+            ) : (
+              <div className="relative aspect-[3/4] rounded-2xl shadow-2xl shadow-blue-900/20 overflow-hidden bg-white border border-slate-200">
+                <div className="h-1/4 bg-gradient-to-br from-blue-700 to-indigo-800 p-6 text-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-white/20 backdrop-blur" />
+                    <div>
+                      <div className="text-xl font-bold">Acme Consulting LLP</div>
+                      <div className="text-xs opacity-80 italic">Strategy. Growth. Excellence.</div>
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          </ScrollArea>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function StatusBanner({ user, onRefresh, onLogin }) {
-  const [uploading, setUploading] = useState(false)
-  const [files, setFiles] = useState([])
-  const [userNote, setUserNote] = useState('')
-
-  if (!user) {
-    return (
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200">
-        <div className="max-w-[1600px] mx-auto px-6 py-2.5 flex items-center justify-between gap-3 text-sm">
-          <div className="flex items-center gap-2 text-blue-900">
-            <Sparkles className="w-4 h-4" />
-            <span>You're browsing as guest — free templates work, but <b>save library</b>, <b>AI</b>, and <b>premium templates</b> require an account.</span>
-          </div>
-          <Button size="sm" onClick={onLogin} className="bg-blue-600 hover:bg-blue-700">Sign up free</Button>
+                </div>
+                <div className="p-7 space-y-3">
+                  <div className="flex justify-between text-[10px] text-slate-500"><span>Ref: ACL/25-26/0042</span><span>15 August 2025</span></div>
+                  <div className="space-y-2 pt-3">
+                    <div className="h-2 bg-slate-200 rounded w-3/4" />
+                    <div className="h-2 bg-slate-200 rounded w-full" />
+                    <div className="h-2 bg-slate-200 rounded w-5/6" />
+                    <div className="h-2 bg-slate-200 rounded w-full" />
+                    <div className="h-2 bg-slate-200 rounded w-2/3" />
+                  </div>
+                  <div className="pt-6">
+                    <div className="h-2 bg-slate-300 rounded w-1/3" />
+                    <div className="h-px bg-slate-300 mt-12 w-2/5" />
+                    <div className="h-2 bg-slate-200 rounded w-1/4 mt-1" />
+                  </div>
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-br from-blue-700 to-indigo-800" />
+              </div>
+            )}
+            {/* Float chip */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 }}
+              className="absolute -left-4 top-1/4 bg-white shadow-xl rounded-xl p-3 flex items-center gap-2 border"
+            >
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div className="text-xs font-bold">AI Writer</div>
+                <div className="text-[10px] text-slate-500">Powered by GPT-4o</div>
+              </div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.1 }}
+              className="absolute -right-4 bottom-1/4 bg-white shadow-xl rounded-xl p-3 flex items-center gap-2 border"
+            >
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                <FileDown className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div className="text-xs font-bold">PDF / PNG</div>
+                <div className="text-[10px] text-slate-500">Multi-page export</div>
+              </div>
+            </motion.div>
+          </motion.div>
         </div>
-      </div>
-    )
-  }
+      </section>
 
-  if (user.status === 'approved') return null
-
-  const onPick = (e) => {
-    const list = Array.from(e.target.files || [])
-    Promise.all(list.map(f => new Promise(res => {
-      const r = new FileReader()
-      r.onload = () => res({ name: f.name, dataUri: r.result })
-      r.readAsDataURL(f)
-    }))).then(picked => setFiles((prev) => prev.concat(picked)))
-    e.target.value = ''
-  }
-
-  const submitDocs = async () => {
-    if (files.length === 0) return toast.error('Pick at least one file')
-    setUploading(true)
-    try {
-      const res = await fetch('/api/user/upload-docs', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ documents: files, note: userNote }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Upload failed')
-      toast.success('Documents submitted for review')
-      setFiles([])
-      setUserNote('')
-      onRefresh?.()
-    } catch (e) { toast.error(e.message) } finally { setUploading(false) }
-  }
-
-  if (user.status === 'pending') {
-    return (
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200">
-        <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-start gap-3 text-sm">
-          <Clock className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <div className="font-semibold text-amber-900">Awaiting admin approval</div>
-            <div className="text-xs text-amber-800 mt-0.5">
-              You can build & download letterheads using free templates. <b>Premium templates, AI letter writer</b>, and <b>save to library</b> will unlock after the admin approves your account.
-              {user.payment?.utr && <> Payment UTR <span className="font-mono">{user.payment.utr}</span> submitted for verification.</>}
-            </div>
+      {/* Features */}
+      <section className="py-16 md:py-24 bg-slate-50/80 border-y border-slate-200/60">
+        <div className="max-w-7xl mx-auto px-5">
+          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-center max-w-2xl mx-auto mb-12">
+            <div className="text-sm font-semibold text-blue-600 uppercase tracking-wider mb-2">Features</div>
+            <h2 className="text-3xl md:text-5xl font-extrabold text-slate-900">Everything you need to look professional</h2>
+            <p className="text-slate-600 mt-4">Stop fiddling with Word and Canva. Generate brand-perfect documents in seconds.</p>
+          </motion.div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {(content.features || []).map((feat, i) => {
+              const Icon = ICON_MAP[feat.icon] || FileText
+              return (
+                <motion.div
+                  key={feat.id}
+                  custom={i}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true, margin: '-50px' }}
+                  variants={fadeUp}
+                  className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60 hover:shadow-md transition"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mb-4 shadow shadow-blue-500/30">
+                    <Icon className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-1.5">{feat.title}</h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">{feat.description}</p>
+                </motion.div>
+              )
+            })}
           </div>
         </div>
-      </div>
-    )
-  }
-  if (user.status === 'rejected') {
-    return (
-      <div className="bg-gradient-to-r from-red-50 to-rose-50 border-b border-red-200">
-        <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-start gap-3 text-sm">
-          <XCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
-          <div>
-            <div className="font-semibold text-red-900">Account rejected</div>
-            <div className="text-xs text-red-800 mt-0.5">Your account has been rejected by the admin. Please contact support for assistance.</div>
+      </section>
+
+      {/* Pricing */}
+      <section id="pricing" className="py-16 md:py-24">
+        <div className="max-w-7xl mx-auto px-5">
+          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-center max-w-2xl mx-auto mb-14">
+            <div className="text-sm font-semibold text-blue-600 uppercase tracking-wider mb-2">Pricing</div>
+            <h2 className="text-3xl md:text-5xl font-extrabold text-slate-900">Plans for every business</h2>
+            <p className="text-slate-600 mt-4">Start free — upgrade when you're ready. Cancel anytime.</p>
+          </motion.div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 max-w-5xl mx-auto items-stretch">
+            {visiblePlans.map((p, i) => <PricingCard key={p.id} plan={p} currency={content.currency || '\u20B9'} index={i} />)}
           </div>
         </div>
-      </div>
-    )
-  }
-  if (user.status === 'docs_requested') {
-    return (
-      <div className="bg-gradient-to-r from-violet-50 to-fuchsia-50 border-b border-violet-200">
-        <div className="max-w-[1600px] mx-auto px-6 py-3 text-sm">
-          <div className="flex items-start gap-3">
-            <FileQuestion className="w-5 h-5 text-violet-600 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <div className="font-semibold text-violet-900">Admin has requested documents</div>
-              <div className="text-xs text-violet-800 mt-0.5 mb-2 italic">"{user.docsRequest?.message}"</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="cursor-pointer text-xs px-3 py-1.5 rounded-md bg-white border border-violet-300 hover:bg-violet-100 transition gap-1 inline-flex items-center">
-                  <Upload className="w-3.5 h-3.5" /> Add files
-                  <input type="file" accept="image/*,.pdf,.doc,.docx" multiple onChange={onPick} className="hidden" />
-                </label>
-                {files.length > 0 && (
-                  <span className="text-xs text-violet-700">{files.length} file(s) ready: {files.map(f => f.name).join(', ').slice(0, 60)}</span>
-                )}
-                <Input value={userNote} onChange={(e) => setUserNote(e.target.value)} placeholder="Optional note to admin..." className="h-8 text-xs max-w-xs" />
-                <Button size="sm" onClick={submitDocs} disabled={uploading || files.length === 0} className="bg-violet-600 hover:bg-violet-700 gap-1">
-                  {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Submit
-                </Button>
+      </section>
+
+      {/* CTA strip */}
+      <section className="py-12 md:py-20 bg-gradient-to-r from-blue-700 to-indigo-800 text-white">
+        <div className="max-w-5xl mx-auto px-5 text-center">
+          <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-3xl md:text-4xl font-extrabold mb-3">
+            Ready to ditch boring Word templates?
+          </motion.h2>
+          <motion.p initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={1} className="text-blue-100 mb-6">
+            Create your first professional letterhead in under 2 minutes.
+          </motion.p>
+          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} custom={2}>
+            <Button size="lg" className="bg-white text-blue-700 hover:bg-blue-50 h-12 px-8 gap-2 font-semibold" onClick={() => router.push('/builder')}>
+              Get Started Free <ArrowRight className="w-4 h-4" />
+            </Button>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-slate-900 text-slate-300 py-10">
+        <div className="max-w-7xl mx-auto px-5">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center">
+                <FileText className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div className="font-bold text-white">LetterHead Pro</div>
+                <div className="text-xs text-slate-400">{content.footer?.tagline}</div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-  return null
-}
-
-function App() {
-  const router = useRouter()
-  const [currentId, setCurrentId] = useState(null)
-  const [company, setCompany] = useState(defaultCompany)
-  const [templateId, setTemplateId] = useState(TEMPLATES[0].id)
-  const [letterBody, setLetterBody] = useState(defaultLetter)
-  const [signature, setSignature] = useState('')
-  const [letterMeta, setLetterMeta] = useState({
-    date: new Date().toISOString().slice(0, 10), // YYYY-MM-DD
-    refNo: '',
-  })
-  const [aiPrompt, setAiPrompt] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [libraryOpen, setLibraryOpen] = useState(false)
-  const [user, setUser] = useState(null)
-  const [authOpen, setAuthOpen] = useState(false)
-  const [authTab, setAuthTab] = useState('login')
-  const [changePwdOpen, setChangePwdOpen] = useState(false)
-  const previewRef = useRef(null)
-  const hiddenRef = useRef(null)
-
-  // Load current user on mount
-  const refreshUser = async () => {
-    try {
-      const r = await fetch('/api/auth/me', { credentials: 'include' })
-      const d = await r.json()
-      setUser(d.user)
-    } catch {}
-  }
-  useEffect(() => { refreshUser() }, [])
-
-  const isApproved = user?.status === 'approved'
-  const isAdmin = user?.role === 'admin'
-
-  const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-    setUser(null)
-    setCurrentId(null)
-    toast.success('Logged out')
-  }
-
-  const requireAuth = (action) => {
-    if (!user) {
-      setAuthTab('login')
-      setAuthOpen(true)
-      toast.info('Please log in to continue')
-      return false
-    }
-    return true
-  }
-
-  const template = TEMPLATES.find((t) => t.id === templateId) || TEMPLATES[0]
-  const updateCompany = (k, v) => setCompany((c) => ({ ...c, [k]: v }))
-
-  const onLogoUpload = (e) => {
-    const file = e.target.files?.[0]; if (!file) return
-    const r = new FileReader(); r.onload = () => updateCompany('logo', r.result); r.readAsDataURL(file)
-  }
-  const onSignatureUpload = (e) => {
-    const file = e.target.files?.[0]; if (!file) return
-    const r = new FileReader(); r.onload = () => setSignature(r.result); r.readAsDataURL(file)
-  }
-
-  const generateAI = async () => {
-    if (!user) { setAuthTab('login'); setAuthOpen(true); return toast.info('Log in to use AI letter writer') }
-    if (!isApproved) return toast.error('AI is a premium feature \u2014 awaiting admin approval')
-    if (!aiPrompt.trim()) return toast.error('Describe the letter you want')
-    setAiLoading(true)
-    try {
-      const res = await fetch('/api/ai/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ prompt: aiPrompt, company, tone: 'professional' }) })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'AI failed')
-      setLetterBody(data.body)
-      toast.success('Letter generated!')
-    } catch (e) { toast.error(e.message) } finally { setAiLoading(false) }
-  }
-
-  const downloadPDF = async () => {
-    setExporting(true)
-    try {
-      const html2canvas = (await import('html2canvas')).default
-      const { jsPDF } = await import('jspdf')
-      const node = hiddenRef.current
-      if (!node) return
-      // Render the full-flow doc (paginated=true means body flows naturally + footer in normal flow)
-      const canvas = await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
-      const pageWidth = pdf.internal.pageSize.getWidth()
-      const pageHeight = pdf.internal.pageSize.getHeight()
-      const imgWidth = pageWidth
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      let heightLeft = imgHeight
-      let position = 0
-      const imgData = canvas.toDataURL('image/jpeg', 0.95)
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
-      heightLeft -= pageHeight
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight
-        pdf.addPage()
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
-        heightLeft -= pageHeight
-      }
-      pdf.save(`${(company.businessName || 'letterhead').replace(/\s+/g, '_')}.pdf`)
-      toast.success('PDF downloaded')
-    } catch (e) { toast.error('Export failed: ' + e.message) } finally { setExporting(false) }
-  }
-
-  const downloadPNG = async () => {
-    setExporting(true)
-    try {
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(previewRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
-      const link = document.createElement('a')
-      link.download = `${(company.businessName || 'letterhead').replace(/\s+/g, '_')}.png`
-      link.href = canvas.toDataURL('image/png')
-      link.click()
-      toast.success('PNG downloaded')
-    } catch (e) { toast.error('Export failed') } finally { setExporting(false) }
-  }
-
-  const saveLetterhead = async () => {
-    if (!requireAuth()) return
-    if (!isApproved) return toast.error('Save library is a premium feature \u2014 awaiting admin approval')
-    try {
-      const payload = { id: currentId || undefined, title: `${company.businessName} — ${template.name}`, company, template: templateId, letterBody, signature, letterMeta }
-      const res = await fetch('/api/letterheads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Save failed')
-      setCurrentId(data.id)
-      toast.success('Saved to library')
-    } catch (e) { toast.error(e.message) }
-  }
-
-  const openLibrary = () => {
-    if (!requireAuth()) return
-    if (!isApproved) return toast.error('Library is a premium feature \u2014 awaiting admin approval')
-    setLibraryOpen(true)
-  }
-
-  const selectTemplate = (t) => {
-    if (t.premium && !isApproved) {
-      if (!user) {
-        setAuthTab('signup'); setAuthOpen(true)
-        return toast.info('Sign up to unlock premium templates')
-      }
-      return toast.error('Premium template \u2014 awaiting admin approval')
-    }
-    setTemplateId(t.id)
-  }
-
-  const loadLetterhead = (it) => {
-    setCurrentId(it.id)
-    setCompany(it.company || defaultCompany)
-    setTemplateId(it.template || TEMPLATES[0].id)
-    setLetterBody(it.letterBody || '')
-    setSignature(it.signature || '')
-    setLetterMeta(it.letterMeta || { date: new Date().toISOString().slice(0, 10), refNo: '' })
-    toast.success(`Loaded “${it.title}”`)
-  }
-
-  const newDoc = () => {
-    setCurrentId(null)
-    setCompany(defaultCompany)
-    setTemplateId(TEMPLATES[0].id)
-    setLetterBody(defaultLetter)
-    setSignature('')
-    setLetterMeta({ date: new Date().toISOString().slice(0, 10), refNo: '' })
-    toast.success('New letterhead')
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100">
-      <header className="sticky top-0 z-30 backdrop-blur-lg bg-white/70 border-b border-slate-200/60">
-        <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <FileText className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="font-bold text-lg leading-tight text-slate-900">LetterHead Pro</div>
-              <div className="text-xs text-slate-500 leading-tight">Create professional letterheads in minutes</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="ghost" onClick={newDoc} className="gap-2"><Plus className="w-4 h-4" /> New</Button>
-            <Button variant="outline" onClick={openLibrary} className="gap-2"><FolderOpen className="w-4 h-4" /> Library</Button>
-            <Button variant="outline" onClick={saveLetterhead} className="gap-2"><Save className="w-4 h-4" /> Save</Button>
-            <Button variant="outline" onClick={downloadPNG} disabled={exporting} className="gap-2"><FileImage className="w-4 h-4" /> PNG</Button>
-            <Button onClick={downloadPDF} disabled={exporting} className="gap-2 bg-blue-600 hover:bg-blue-700">
-              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} Download PDF
-            </Button>
-            <div className="ml-2 pl-2 border-l border-slate-300">
-              {user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition">
-                      <Avatar className="w-8 h-8">
-                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-bold">
-                          {(user.name || user.email || '?').slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="text-left hidden md:block">
-                        <div className="text-xs font-semibold text-slate-900 leading-tight">{user.name}</div>
-                        <div className="text-[10px] text-slate-500 leading-tight">{user.email}</div>
-                      </div>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>
-                      <div className="font-semibold">{user.name}</div>
-                      <div className="text-xs font-normal text-slate-500">{user.email}</div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {isAdmin && (
-                      <DropdownMenuItem onClick={() => router.push('/admin')} className="text-blue-600 font-semibold">
-                        <Shield className="w-4 h-4 mr-2" /> Admin Panel
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem onClick={() => openLibrary()}><FolderOpen className="w-4 h-4 mr-2" /> My Letterheads</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setChangePwdOpen(true)}><KeyRound className="w-4 h-4 mr-2" /> Change Password</DropdownMenuItem>
-                    <DropdownMenuItem onClick={logout} className="text-red-600"><LogOut className="w-4 h-4 mr-2" /> Log out</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Button onClick={() => { setAuthTab('login'); setAuthOpen(true) }} variant="ghost" className="gap-2"><LogIn className="w-4 h-4" /> Log in</Button>
-              )}
+            <div className="text-xs text-slate-400 text-center md:text-right">
+              <div>{content.footer?.copyright}</div>
+              {content.footer?.email && <div>Contact: <a href={`mailto:${content.footer.email}`} className="hover:text-white">{content.footer.email}</a></div>}
             </div>
           </div>
         </div>
-      </header>
-
-      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} onAuthed={(u) => { setUser(u); refreshUser() }} defaultTab={authTab} />
-      <ChangePasswordDialog open={changePwdOpen} onOpenChange={setChangePwdOpen} />
-
-      <StatusBanner user={user} onRefresh={refreshUser} onLogin={() => { setAuthTab('signup'); setAuthOpen(true) }} />
-
-      <LibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} onLoad={loadLetterhead} />
-
-      <div className="max-w-[1600px] mx-auto px-6 py-6 grid grid-cols-12 gap-6">
-        {/* LEFT */}
-        <div className="col-span-12 lg:col-span-3">
-          <Card className="p-0 overflow-hidden border-slate-200/70 shadow-sm">
-            <Tabs defaultValue="company" className="w-full">
-              <TabsList className="w-full rounded-none border-b bg-slate-50/50 h-11">
-                <TabsTrigger value="company" className="flex-1 gap-1.5"><Building2 className="w-3.5 h-3.5" />Profile</TabsTrigger>
-                <TabsTrigger value="letter" className="flex-1 gap-1.5"><CalendarDays className="w-3.5 h-3.5" />Letter</TabsTrigger>
-                <TabsTrigger value="design" className="flex-1 gap-1.5"><Palette className="w-3.5 h-3.5" />Design</TabsTrigger>
-                <TabsTrigger value="ai" className="flex-1 gap-1.5"><Sparkles className="w-3.5 h-3.5" />AI</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="company" className="m-0">
-                <ScrollArea className="h-[calc(100vh-180px)]">
-                  <div className="p-4 space-y-3">
-                    <div>
-                      <Label className="text-xs">Logo</Label>
-                      <div className="mt-1 flex items-center gap-3">
-                        {company.logo ? <img src={company.logo} alt="logo" className="w-14 h-14 object-contain border rounded-lg bg-white" /> : <div className="w-14 h-14 border-2 border-dashed rounded-lg flex items-center justify-center text-slate-400"><ImageIcon className="w-5 h-5" /></div>}
-                        <label className="cursor-pointer text-xs px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 transition">Upload<input type="file" accept="image/*" onChange={onLogoUpload} className="hidden" /></label>
-                        {company.logo && <button onClick={() => updateCompany('logo', '')} className="text-xs text-red-500 hover:underline">Remove</button>}
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-xs flex items-center gap-1"><PenLine className="w-3 h-3" />Signature (optional)</Label>
-                      <div className="mt-1 flex items-center gap-3">
-                        {signature ? <img src={signature} alt="signature" className="h-10 object-contain border rounded bg-white px-2" /> : <div className="h-10 px-3 border-2 border-dashed rounded flex items-center justify-center text-slate-400 text-xs">No signature</div>}
-                        <label className="cursor-pointer text-xs px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 transition">Upload<input type="file" accept="image/*" onChange={onSignatureUpload} className="hidden" /></label>
-                        {signature && <button onClick={() => setSignature('')} className="text-xs text-red-500 hover:underline">Remove</button>}
-                      </div>
-                    </div>
-                    <Separator />
-                    <Field label="Business Name" value={company.businessName} onChange={(v) => updateCompany('businessName', v)} />
-                    <Field label="Tagline" value={company.tagline} onChange={(v) => updateCompany('tagline', v)} />
-                    <Field label="Owner / Authorised Signatory" value={company.ownerName} onChange={(v) => updateCompany('ownerName', v)} />
-                    <Separator />
-                    <Field icon={<Hash className="w-3 h-3" />} label="GSTIN" value={company.gst} onChange={(v) => updateCompany('gst', v)} />
-                    <Field icon={<Hash className="w-3 h-3" />} label="PAN" value={company.pan} onChange={(v) => updateCompany('pan', v)} />
-                    <Field icon={<Hash className="w-3 h-3" />} label="CIN" value={company.cin} onChange={(v) => updateCompany('cin', v)} />
-                    <Field icon={<Hash className="w-3 h-3" />} label="Registration No." value={company.regNo} onChange={(v) => updateCompany('regNo', v)} />
-                    <Separator />
-                    <Field icon={<Phone className="w-3 h-3" />} label="Phone" value={company.phone} onChange={(v) => updateCompany('phone', v)} />
-                    <Field icon={<Mail className="w-3 h-3" />} label="Email" value={company.email} onChange={(v) => updateCompany('email', v)} />
-                    <Field icon={<Globe className="w-3 h-3" />} label="Website" value={company.website} onChange={(v) => updateCompany('website', v)} />
-                    <div>
-                      <Label className="text-xs flex items-center gap-1"><MapPin className="w-3 h-3" />Address</Label>
-                      <Textarea value={company.address} onChange={(e) => updateCompany('address', e.target.value)} className="mt-1 text-xs" rows={3} />
-                    </div>
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              <TabsContent value="letter" className="m-0">
-                <div className="p-4 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
-                      <CalendarDays className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-sm">Letter Details</div>
-                      <div className="text-xs text-slate-500">Date & reference shown on letterhead</div>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs flex items-center gap-1"><CalendarDays className="w-3 h-3" />Date</Label>
-                    <Input
-                      type="date"
-                      value={letterMeta.date}
-                      onChange={(e) => setLetterMeta((m) => ({ ...m, date: e.target.value }))}
-                      className="mt-1 text-sm h-9"
-                    />
-                    <div className="text-[11px] text-slate-500 mt-1">
-                      Shown as: <span className="font-medium text-slate-700">
-                        {(() => {
-                          if (!letterMeta.date) return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
-                          const [y, mo, d] = letterMeta.date.split('-').map(Number)
-                          return new Date(y, mo - 1, d).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
-                        })()}
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs flex items-center gap-1"><Hash className="w-3 h-3" />Reference No. (optional)</Label>
-                    <Input
-                      value={letterMeta.refNo}
-                      onChange={(e) => setLetterMeta((m) => ({ ...m, refNo: e.target.value }))}
-                      placeholder="e.g. ACL/2025-26/0042"
-                      className="mt-1 text-sm h-9"
-                    />
-                    <div className="text-[11px] text-slate-500 mt-1">Leave blank for a blank line on the letterhead.</div>
-                  </div>
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setLetterMeta({ date: new Date().toISOString().slice(0, 10), refNo: '' })}
-                    >
-                      Reset to today
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setLetterMeta((m) => ({ ...m, date: '' }))}
-                    >
-                      Clear date
-                    </Button>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="design" className="m-0">
-                <ScrollArea className="h-[calc(100vh-180px)]">
-                  <div className="p-4 space-y-3">
-                    <div className="text-xs text-slate-500 mb-2 flex items-center justify-between">
-                      <span>{TEMPLATES.filter(t => !t.premium).length} free · {TEMPLATES.filter(t => t.premium).length} premium</span>
-                      {!isApproved && <span className="text-amber-600 flex items-center gap-1"><Lock className="w-3 h-3" />Approval unlocks all</span>}
-                    </div>
-                    <div className="grid grid-cols-1 gap-2">
-                      {TEMPLATES.map((t) => {
-                        const locked = t.premium && !isApproved
-                        return (
-                          <button key={t.id} onClick={() => selectTemplate(t)} className={`text-left p-3 rounded-lg border-2 transition relative ${templateId === t.id ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300 bg-white'} ${locked ? 'opacity-75' : ''}`}>
-                            <div className="flex items-center gap-3">
-                              <div className="w-6 h-10 rounded shrink-0 relative" style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.accent})` }}>
-                                {locked && <Lock className="w-3 h-3 text-white absolute inset-0 m-auto" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-sm flex items-center gap-1.5">
-                                  {t.name}
-                                  {t.premium && <Sparkles className="w-3 h-3 text-amber-500" />}
-                                </div>
-                                <div className="text-[10px] text-slate-500 uppercase tracking-wide">{t.category}</div>
-                              </div>
-                              {locked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              <TabsContent value="ai" className="m-0">
-                <div className="p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center"><Sparkles className="w-4 h-4 text-white" /></div>
-                    <div>
-                      <div className="font-semibold text-sm">AI Letter Writer</div>
-                      <div className="text-xs text-slate-500">Powered by GPT-4o-mini</div>
-                    </div>
-                  </div>
-                  <Textarea placeholder={'e.g. Write a formal letter to a client confirming the engagement for FY 2025-26 GST filings and outline next steps.'} value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={6} className="text-sm" />
-                  <Button onClick={generateAI} disabled={aiLoading} className="w-full gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700">
-                    {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    {aiLoading ? 'Generating...' : 'Generate Letter Body'}
-                  </Button>
-                  <div className="text-[11px] text-slate-500">Tip: Mention recipient, purpose & tone. AI uses your company profile as context.</div>
-                  <Separator />
-                  <div className="space-y-1">
-                    <div className="text-xs font-semibold mb-1">Quick prompts</div>
-                    {[
-                      'Client engagement confirmation letter for GST advisory services',
-                      'NOC letter for a vendor partnership',
-                      'Appointment letter for a new employee joining as Senior Consultant',
-                      'Formal request for proposal extension',
-                      'Thank you letter to a donor for their contribution',
-                      'Medical fitness certificate for a patient resuming work',
-                    ].map((q) => (
-                      <button key={q} onClick={() => setAiPrompt(q)} className="block w-full text-left text-xs p-2 rounded hover:bg-slate-100 text-slate-600">{'\u2192 '}{q}</button>
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </Card>
-        </div>
-
-        {/* CENTER */}
-        <div className="col-span-12 lg:col-span-6">
-          <Card className="p-6 bg-slate-100/60 border-slate-200/70 overflow-auto">
-            <div className="text-xs text-slate-500 mb-3 flex items-center justify-between">
-              <span>Live preview — A4 size {currentId && <span className="ml-2 text-emerald-600 font-medium">• saved</span>}</span>
-              <span className="font-mono">{template.name}</span>
-            </div>
-            <div className="flex justify-center" style={{ transform: 'scale(0.78)', transformOrigin: 'top center', marginBottom: '-220px' }}>
-              <LetterheadDoc company={company} template={template} letterBody={letterBody} signature={signature} letterMeta={letterMeta} refEl={previewRef} />
-            </div>
-          </Card>
-        </div>
-
-        {/* RIGHT */}
-        <div className="col-span-12 lg:col-span-3">
-          <Card className="p-4 border-slate-200/70 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <Label className="text-sm font-semibold">Letter Body</Label>
-              <div className="text-xs text-slate-500">{letterBody.length} chars</div>
-            </div>
-            <Textarea value={letterBody} onChange={(e) => setLetterBody(e.target.value)} rows={28} className="text-sm font-mono leading-relaxed" placeholder="Type your letter content here, or use AI to generate it..." />
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" onClick={() => setLetterBody(defaultLetter)}>Reset sample</Button>
-              <Button variant="outline" size="sm" onClick={() => setLetterBody('')}>Clear</Button>
-            </div>
-            <div className="mt-3 text-[11px] text-slate-500 leading-relaxed">
-              💡 Long letters auto-flow across multiple pages in the PDF. The preview shows page 1 only.
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Hidden offscreen full-flow doc for multi-page PDF export */}
-      <div style={{ position: 'fixed', left: -10000, top: 0, opacity: 0, pointerEvents: 'none' }} aria-hidden>
-        <LetterheadDoc company={company} template={template} letterBody={letterBody} signature={signature} letterMeta={letterMeta} refEl={hiddenRef} paginated />
-      </div>
+      </footer>
     </div>
   )
 }
-
-export default App
