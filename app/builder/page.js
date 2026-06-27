@@ -65,6 +65,20 @@ function LetterheadDoc({ company, template, letterBody, signature, letterMeta = 
   })()
   const refText = letterMeta?.refNo && letterMeta.refNo.trim() ? letterMeta.refNo : '___________________'
 
+  // Helpers
+  const hex2rgba = (hex, a = 0.05) => {
+    if (!hex || !hex.startsWith('#')) return `rgba(0,0,0,${a})`
+    const h = hex.replace('#', '')
+    const r = parseInt(h.length === 3 ? h[0] + h[0] : h.substring(0, 2), 16)
+    const g = parseInt(h.length === 3 ? h[1] + h[1] : h.substring(2, 4), 16)
+    const b = parseInt(h.length === 3 ? h[2] + h[2] : h.substring(4, 6), 16)
+    return `rgba(${r},${g},${b},${a})`
+  }
+
+  const serifFont = '"Playfair Display", Georgia, serif'
+  const sansFont = '"Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif'
+  const baseFont = t.font === 'Georgia' ? serifFont : sansFont
+
   return (
     <div
       ref={refEl}
@@ -73,97 +87,201 @@ function LetterheadDoc({ company, template, letterBody, signature, letterMeta = 
         width: '794px',
         minHeight: paginated ? 'auto' : '1123px',
         background: '#ffffff',
-        fontFamily: t.font === 'Georgia' ? 'Georgia, serif' : 'Inter, system-ui, sans-serif',
+        fontFamily: baseFont,
         color: '#111827',
         margin: '0 auto',
-        boxShadow: paginated ? 'none' : '0 20px 60px rgba(0,0,0,0.15)',
+        boxShadow: paginated ? 'none' : '0 25px 70px rgba(15,23,42,0.18)',
         position: 'relative',
         overflow: 'hidden',
-        paddingBottom: '92px', // reserve footer area
+        paddingBottom: '108px', // reserve footer area
       }}
     >
-      {/* ===== HEADERS ===== */}
+      {/* WATERMARK — subtle company name centered behind body */}
+      {company.businessName && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: t.font === 'Georgia' ? serifFont : sansFont,
+              fontSize: 86,
+              fontWeight: 800,
+              color: t.primary,
+              opacity: 0.035,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              transform: 'rotate(-22deg)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {(company.businessName || '').slice(0, 28)}
+          </div>
+        </div>
+      )}
+
+      {/* ========================= HEADERS ========================= */}
+
+      {/* MINIMAL — refined: top accent bar + soft tagline chip */}
       {t.headerStyle === 'minimal' && (
-        <div style={{ padding: '40px 56px 24px', borderBottom: `3px solid ${t.accent}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-            {company.logo && <img src={company.logo} alt="logo" style={{ height: 56, width: 56, objectFit: 'contain' }} />}
-            <div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: t.primary, letterSpacing: '-0.02em' }}>{company.businessName}</div>
-              {company.tagline && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{company.tagline}</div>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {(t.headerStyle === 'gradient' || t.headerStyle === 'classic') && (
-        <div style={{ background: headerBg, color: '#ffffff', padding: '32px 56px', borderBottom: t.headerStyle === 'classic' ? `6px double ${t.accent}` : 'none' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+        <div style={{ position: 'relative', padding: '36px 56px 22px', borderBottom: `1px solid ${hex2rgba(t.primary, 0.12)}` }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 5, background: `linear-gradient(90deg, ${t.primary}, ${t.accent})` }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-              {company.logo && <img src={company.logo} alt="logo" style={{ height: 68, width: 68, objectFit: 'contain', background: '#fff', borderRadius: 8, padding: 6 }} />}
+              {company.logo && <img src={company.logo} alt="logo" style={{ height: 60, width: 60, objectFit: 'contain' }} />}
               <div>
-                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.02em' }}>{company.businessName}</div>
-                {company.tagline && <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4, fontStyle: 'italic' }}>{company.tagline}</div>}
+                <div style={{ fontSize: 30, fontWeight: 800, color: t.primary, letterSpacing: '-0.02em', lineHeight: 1.1 }}>{company.businessName}</div>
+                {company.tagline && <div style={{ fontSize: 11, color: t.accent, marginTop: 6, letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600 }}>{company.tagline}</div>}
               </div>
             </div>
-            <div style={{ textAlign: 'right', fontSize: 11, lineHeight: 1.6, opacity: 0.95 }}>
-              {company.regNo && <div>Reg: {company.regNo}</div>}
-              {company.cin && <div>CIN: {company.cin}</div>}
-              {company.gst && <div>GST: {company.gst}</div>}
-            </div>
+            {(company.gst || company.pan) && (
+              <div style={{ textAlign: 'right', fontSize: 10.5, color: '#6b7280', lineHeight: 1.6 }}>
+                {company.gst && <div>GSTIN: <span style={{ color: t.primary, fontWeight: 600 }}>{company.gst}</span></div>}
+                {company.pan && <div>PAN: <span style={{ color: t.primary, fontWeight: 600 }}>{company.pan}</span></div>}
+              </div>
+            )}
           </div>
         </div>
       )}
 
+      {/* GRADIENT — refined: SVG wave overlay + frosted info card */}
+      {t.headerStyle === 'gradient' && (
+        <div style={{ background: headerBg, color: '#ffffff', padding: '34px 56px 30px', position: 'relative', overflow: 'hidden' }}>
+          {/* decorative circles */}
+          <div style={{ position: 'absolute', top: -60, right: -40, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: -100, right: 80, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+              {company.logo && <img src={company.logo} alt="logo" style={{ height: 72, width: 72, objectFit: 'contain', background: '#fff', borderRadius: 12, padding: 7, boxShadow: '0 6px 18px rgba(0,0,0,0.18)' }} />}
+              <div>
+                <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.05 }}>{company.businessName}</div>
+                {company.tagline && <div style={{ fontSize: 13, opacity: 0.92, marginTop: 6, fontStyle: 'italic', fontWeight: 300 }}>{company.tagline}</div>}
+              </div>
+            </div>
+            {(company.regNo || company.cin || company.gst) && (
+              <div style={{ textAlign: 'right', fontSize: 10.5, lineHeight: 1.7, opacity: 0.95, background: 'rgba(255,255,255,0.1)', padding: '8px 12px', borderRadius: 8, backdropFilter: 'blur(6px)' }}>
+                {company.regNo && <div>Reg: {company.regNo}</div>}
+                {company.cin && <div>CIN: {company.cin}</div>}
+                {company.gst && <div>GST: {company.gst}</div>}
+              </div>
+            )}
+          </div>
+          {/* bottom wave */}
+          <svg viewBox="0 0 1200 60" preserveAspectRatio="none" style={{ position: 'absolute', bottom: -1, left: 0, right: 0, width: '100%', height: 18, display: 'block' }}>
+            <path d="M0,30 C200,60 400,0 600,20 C800,40 1000,10 1200,30 L1200,60 L0,60 Z" fill="#ffffff" />
+          </svg>
+        </div>
+      )}
+
+      {/* CLASSIC — refined: ornate dividers + serif typography + centered seal-style header */}
+      {t.headerStyle === 'classic' && (
+        <div style={{ position: 'relative' }}>
+          <div style={{ background: headerBg, color: '#ffffff', padding: '34px 56px', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+                {company.logo && <img src={company.logo} alt="logo" style={{ height: 68, width: 68, objectFit: 'contain', background: '#fff', borderRadius: 8, padding: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }} />}
+                <div>
+                  <div style={{ fontFamily: serifFont, fontSize: 32, fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.05 }}>{company.businessName}</div>
+                  {company.tagline && <div style={{ fontSize: 13, opacity: 0.92, marginTop: 4, fontStyle: 'italic', fontFamily: serifFont }}>{company.tagline}</div>}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', fontSize: 11, lineHeight: 1.6, opacity: 0.95, fontFamily: serifFont }}>
+                {company.regNo && <div>Reg: {company.regNo}</div>}
+                {company.cin && <div>CIN: {company.cin}</div>}
+                {company.gst && <div>GST: {company.gst}</div>}
+              </div>
+            </div>
+          </div>
+          {/* Triple-line ornate divider */}
+          <div style={{ background: t.accent, height: 4 }} />
+          <div style={{ background: '#fff', height: 3 }} />
+          <div style={{ background: t.accent, height: 1.5 }} />
+        </div>
+      )}
+
+      {/* DOUBLE BORDER — refined: emblem-style centered with elegant rules */}
       {t.headerStyle === 'doubleBorder' && (
-        <div style={{ padding: '36px 56px 20px', borderTop: `8px solid ${t.primary}`, borderBottom: `2px solid ${t.accent}` }}>
+        <div style={{ padding: '36px 56px 22px', borderTop: `10px solid ${t.primary}`, position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 10, left: 0, right: 0, height: 2, background: t.accent }} />
           <div style={{ textAlign: 'center' }}>
-            {company.logo && <img src={company.logo} alt="logo" style={{ height: 64, objectFit: 'contain', marginBottom: 10 }} />}
-            <div style={{ fontSize: 32, fontWeight: 700, color: t.primary, letterSpacing: '0.02em' }}>{company.businessName}</div>
-            {company.tagline && <div style={{ fontSize: 13, color: t.accent, marginTop: 6, fontStyle: 'italic' }}>{company.tagline}</div>}
-            <div style={{ fontSize: 11, color: '#4b5563', marginTop: 8 }}>
-              {[company.regNo && `Reg: ${company.regNo}`, company.gst && `GSTIN: ${company.gst}`, company.pan && `PAN: ${company.pan}`].filter(Boolean).join('  |  ')}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {t.headerStyle === 'sideBar' && (
-        <div style={{ display: 'flex' }}>
-          <div style={{ width: 14, background: `linear-gradient(180deg, ${t.primary}, ${t.accent})` }} />
-          <div style={{ flex: 1, padding: '36px 56px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-              {company.logo && <img src={company.logo} alt="logo" style={{ height: 64, objectFit: 'contain' }} />}
-              <div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: t.primary }}>{company.businessName}</div>
-                {company.tagline && <div style={{ fontSize: 13, color: t.accent, marginTop: 4 }}>{company.tagline}</div>}
-                {company.ownerName && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{company.ownerName}</div>}
+            {company.logo && (
+              <div style={{ display: 'inline-block', position: 'relative' }}>
+                <img src={company.logo} alt="logo" style={{ height: 68, objectFit: 'contain', marginBottom: 8 }} />
               </div>
+            )}
+            <div style={{ fontFamily: serifFont, fontSize: 34, fontWeight: 700, color: t.primary, letterSpacing: '0.04em', lineHeight: 1.1 }}>{company.businessName}</div>
+            {company.tagline && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 10 }}>
+                <div style={{ height: 1, flex: '0 0 60px', background: t.accent }} />
+                <div style={{ fontSize: 12, color: t.accent, fontStyle: 'italic', letterSpacing: '0.06em', fontFamily: serifFont }}>{company.tagline}</div>
+                <div style={{ height: 1, flex: '0 0 60px', background: t.accent }} />
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#4b5563', marginTop: 10, letterSpacing: '0.04em' }}>
+              {[company.regNo && `Reg: ${company.regNo}`, company.gst && `GSTIN: ${company.gst}`, company.pan && `PAN: ${company.pan}`].filter(Boolean).join('   \u00B7   ')}
             </div>
+          </div>
+          {/* bottom thin double rule */}
+          <div style={{ marginTop: 20, borderTop: `2px solid ${t.primary}`, borderBottom: `1px solid ${t.primary}`, height: 4 }} />
+        </div>
+      )}
+
+      {/* SIDE BAR — refined: vertical gradient ribbon + secondary accent line on right */}
+      {t.headerStyle === 'sideBar' && (
+        <div style={{ display: 'flex', position: 'relative' }}>
+          <div style={{ width: 16, background: `linear-gradient(180deg, ${t.primary} 0%, ${t.accent} 100%)`, position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 24, left: 4, width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
+            <div style={{ position: 'absolute', top: 56, left: 4, width: 8, height: 8, borderRadius: '50%', background: '#fff', opacity: 0.6 }} />
+          </div>
+          <div style={{ flex: 1, padding: '36px 56px 22px', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+              {company.logo && <img src={company.logo} alt="logo" style={{ height: 68, objectFit: 'contain' }} />}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 30, fontWeight: 700, color: t.primary, letterSpacing: '-0.01em', lineHeight: 1.1 }}>{company.businessName}</div>
+                {company.tagline && <div style={{ fontSize: 13, color: t.accent, marginTop: 5, fontWeight: 500 }}>{company.tagline}</div>}
+                {company.ownerName && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>{company.ownerName}</div>}
+              </div>
+              {(company.gst || company.regNo) && (
+                <div style={{ textAlign: 'right', fontSize: 10.5, color: '#6b7280', lineHeight: 1.6, borderLeft: `2px solid ${t.accent}`, paddingLeft: 10 }}>
+                  {company.regNo && <div>Reg: <span style={{ color: t.primary, fontWeight: 600 }}>{company.regNo}</span></div>}
+                  {company.gst && <div>GST: <span style={{ color: t.primary, fontWeight: 600 }}>{company.gst}</span></div>}
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 18, height: 2, background: `linear-gradient(90deg, ${t.primary} 0%, ${hex2rgba(t.primary, 0.1)} 100%)` }} />
           </div>
         </div>
       )}
 
-      {/* DATE + REF */}
-      <div style={{ padding: '20px 56px 0', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}>
-        <div>Ref: {refText}</div>
-        <div>Date: {dateText}</div>
+      {/* DATE + REF — refined typography */}
+      <div style={{ position: 'relative', padding: '22px 56px 0', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#4b5563', letterSpacing: '0.02em', zIndex: 1 }}>
+        <div><span style={{ color: '#9ca3af' }}>Ref:</span> <span style={{ color: t.primary, fontWeight: 600 }}>{refText}</span></div>
+        <div><span style={{ color: '#9ca3af' }}>Date:</span> <span style={{ color: t.primary, fontWeight: 600 }}>{dateText}</span></div>
       </div>
 
       {/* BODY */}
-      <div style={{ padding: '28px 56px 20px', fontSize: 14, lineHeight: 1.75, whiteSpace: 'pre-wrap', color: '#1f2937', minHeight: paginated ? 'auto' : 520 }}>
+      <div style={{ position: 'relative', padding: '26px 56px 16px', fontSize: 14, lineHeight: 1.8, whiteSpace: 'pre-wrap', color: '#1f2937', minHeight: paginated ? 'auto' : 480, zIndex: 1 }}>
         {letterBody}
       </div>
 
-      {/* SIGNATURE */}
-      <div style={{ padding: '0 56px 32px', fontSize: 13, color: '#1f2937' }}>
-        <div style={{ marginTop: 24, fontWeight: 600 }}>For {company.businessName}</div>
+      {/* SIGNATURE — refined block */}
+      <div style={{ position: 'relative', padding: '0 56px 28px', fontSize: 13, color: '#1f2937', zIndex: 1 }}>
+        <div style={{ marginTop: 28, fontWeight: 600, color: t.primary, fontSize: 13 }}>For {company.businessName}</div>
         {signature && <img src={signature} alt="signature" style={{ height: 60, marginTop: 8, objectFit: 'contain' }} />}
-        <div style={{ marginTop: signature ? 8 : 48, borderTop: '1px solid #d1d5db', width: 220, paddingTop: 6, fontSize: 12 }}>
+        <div style={{ marginTop: signature ? 8 : 52, borderTop: `1.5px solid ${t.primary}`, width: 220, paddingTop: 6, fontSize: 11.5, fontWeight: 600, color: t.primary }}>
           {company.ownerName || 'Authorised Signatory'}
         </div>
       </div>
 
-      {/* FOOTER (absolute at bottom of A4 sheet on single page, normal flow when paginated) */}
+      {/* FOOTER — refined: top accent line + icons + better spacing */}
       <div
         className="letterhead-footer"
         style={{
@@ -171,19 +289,25 @@ function LetterheadDoc({ company, template, letterBody, signature, letterMeta = 
           bottom: paginated ? 'auto' : 0,
           left: 0,
           right: 0,
-          background: t.headerStyle === 'minimal' ? '#f9fafb' : t.primary,
+          background: t.headerStyle === 'minimal' ? '#fafbfc' : t.primary,
           color: t.headerStyle === 'minimal' ? '#374151' : '#ffffff',
-          padding: '14px 56px',
+          padding: '16px 56px',
           fontSize: 11,
-          borderTop: t.headerStyle === 'minimal' ? `3px solid ${t.accent}` : 'none',
+          borderTop: t.headerStyle === 'minimal' ? `3px solid ${t.accent}` : `4px solid ${t.accent}`,
+          zIndex: 2,
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          {company.address && (<div style={{ maxWidth: '55%' }}><span style={{ fontWeight: 700 }}>{'\u25CF '}</span>{company.address}</div>)}
-          <div style={{ textAlign: 'right', lineHeight: 1.7 }}>
-            {company.phone && <div>Tel: {company.phone}</div>}
-            {company.email && <div>{company.email}</div>}
-            {company.website && <div>{company.website}</div>}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+          {company.address && (
+            <div style={{ maxWidth: '55%', lineHeight: 1.6 }}>
+              <span style={{ fontWeight: 700, color: t.accent, marginRight: 4 }}>◎</span>
+              {company.address}
+            </div>
+          )}
+          <div style={{ textAlign: 'right', lineHeight: 1.8, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {company.phone && <div><span style={{ opacity: 0.7, marginRight: 4 }}>☎</span>{company.phone}</div>}
+            {company.email && <div><span style={{ opacity: 0.7, marginRight: 4 }}>✉</span>{company.email}</div>}
+            {company.website && <div><span style={{ opacity: 0.7, marginRight: 4 }}>⌘</span>{company.website}</div>}
           </div>
         </div>
       </div>
